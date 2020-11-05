@@ -5,4 +5,4 @@ Files included are:
 
 ``` lofar_models.py ``` : Methods to read LOFAR H5 data and Autoencoder models.
 
-``` kharmonic_lofar.py ``` : Train K-harmonic autoencoder.
+``` kharmonic_lofar.py ``` : Train K-harmonic autoencoder as well as perform clustering in latent space.
