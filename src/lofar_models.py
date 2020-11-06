@@ -149,6 +149,43 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32):
 
 
 ########################################################
+def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32):
+  # open LOFAR H5 file, read data from a SAP,
+  # return data for given baseline_id
+  # Note : 'without unfolding' 
+
+  f=h5py.File(filename,'r')
+  # select a dataset SAP (int8)
+  g=f['measurement']['saps'][SAP]['visibilities']
+  # scale factors for the dataset (float32)
+  h=f['measurement']['saps'][SAP]['visibility_scale_factors']
+
+  (nbase,ntime,nfreq,npol,ncomplex)=g.shape
+  # h shape : nbase, nfreq, npol
+
+  x=torch.zeros(1,8,ntime,nfreq)
+  
+  mybase=baseline_id
+  # this is 8 channels in torch tensor
+  for ci in range(4):
+    # get visibility scales
+    scalefac=torch.from_numpy(h[mybase,:,ci])
+    # add missing (time) dimension
+    scalefac=scalefac[None,:]
+    x[0,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,2*ci]=x[0,2*ci]*scalefac
+    x[0,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,2*ci+1]=x[0,2*ci+1]*scalefac
+
+
+  # do some rough cleanup of data
+  ##y[y!=y]=0 # set NaN,Inf to zero
+  torch.clamp(x,-1e6,1e6) # clip high values
+
+  return x
+
+
+########################################################
 def get_metadata(filename,SAP):
   # open LOFAR H5 file, read metadata from a SAP,
   # return baselines, time, frequencies, polarizations, real/imag

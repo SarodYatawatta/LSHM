@@ -36,6 +36,7 @@ L=256 # latent dimension
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 alpha=0.1 # loss+alpha*cluster_loss
+gamma=0.1 # loss+gamma*augmentation_loss
 
 
 from lofar_models import *
@@ -76,14 +77,27 @@ for epoch in range(num_epochs):
     # wrap them in variable
     inputs=Variable(inputs).to(mydevice)
     (nbatch,nchan,nx,ny)=inputs.shape 
+    # nbatch = patchx x patchy x default_batch
+    # i.e., one baseline will create patchx x patchy batches
+    batch_per_bline=patchx*patchy
+    
     def closure():
         if torch.is_grad_enabled():
          optimizer.zero_grad()
         outputs,mu=net(inputs)
         loss=criterion(outputs,inputs)
         kdist=mod(mu)
-        loss=loss/(nbatch*nchan)+alpha*kdist
-        #print('%f %f'%(kdist.data.item(),loss.data.item()))
+        augmentation_loss=0
+        # process each batch_per_bline rows of mu
+        for ck in range(default_batch):
+          z=mu[ck*batch_per_bline:(ck+1)*batch_per_bline,:]
+          for ci in range(batch_per_bline):
+            augmentation_loss=augmentation_loss+torch.exp(torch.dot(z[ci,:],z[ci,:]))
+            for cj in range(ci+1,batch_per_bline):
+             augmentation_loss=augmentation_loss+torch.exp(-torch.dot(z[ci,:],z[cj,:]))
+         
+        loss=loss/(nbatch*nchan)+alpha*kdist+gamma*augmentation_loss
+        #print('%f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item()))
         if loss.requires_grad:
           loss.backward()
         return loss

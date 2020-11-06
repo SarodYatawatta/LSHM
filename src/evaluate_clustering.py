@@ -50,3 +50,6 @@ for nb in range(nbase):
  dist=dist/nbatch
  (values,indices)=torch.min(dist,0)
  print('%d %f %d'%(nb,kdist,indices[0])) 
+ #vis=get_data_for_baseline_flat(file_list[0],sap_list[0],baseline_id=nb)
+ #torchvision.utils.save_image(vis[0,0].data, 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
+
