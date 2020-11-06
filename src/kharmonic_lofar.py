@@ -18,7 +18,7 @@ else:
 
 #torch.manual_seed(69)
 default_batch=8 # no. of baselines per iter, batch size determined by how many patches are created
-num_epochs=10 # total epochs
+num_epochs=40 # total epochs
 Niter=40 # how many minibatches are considered for an epoch
 save_model=True
 load_model=False
@@ -36,7 +36,7 @@ L=256 # latent dimension
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 alpha=0.1 # loss+alpha*cluster_loss
-gamma=0.1 # loss+gamma*augmentation_loss
+gamma=1.0 # loss+gamma*augmentation_loss
 
 
 from lofar_models import *
@@ -91,11 +91,14 @@ for epoch in range(num_epochs):
         # process each batch_per_bline rows of mu
         for ck in range(default_batch):
           z=mu[ck*batch_per_bline:(ck+1)*batch_per_bline,:]
+          numerator=0
+          denominator=0
           for ci in range(batch_per_bline):
-            augmentation_loss=augmentation_loss+torch.exp(torch.dot(z[ci,:],z[ci,:]))
+            numerator=numerator+(torch.dot(z[ci,:],z[ci,:]))
             for cj in range(ci+1,batch_per_bline):
-             augmentation_loss=augmentation_loss+torch.exp(-torch.dot(z[ci,:],z[cj,:]))
-         
+             denominator=denominator+(torch.dot(z[ci,:],z[cj,:]))
+          #print('%f %f'%(numerator.data.item(),denominator.data.item()))
+          augmentation_loss=augmentation_loss+numerator/(denominator/batch_per_bline+1e-6)
         loss=loss/(nbatch*nchan)+alpha*kdist+gamma*augmentation_loss
         #print('%f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item()))
         if loss.requires_grad:
