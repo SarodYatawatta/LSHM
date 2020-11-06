@@ -7,6 +7,8 @@ import torchvision.transforms as transforms
 import numpy as np
 import h5py
 
+# Train autoencoder and k-harmonic mean clustering using LOFAR data
+
 # (try to) use a GPU for computation?
 use_cuda=True
 if use_cuda and torch.cuda.is_available():
@@ -31,7 +33,7 @@ sap_list=['1','2']
 
 
 L=256 # latent dimension
-Kc=15 # clusters
+Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 alpha=0.1 # loss+alpha*cluster_loss
 

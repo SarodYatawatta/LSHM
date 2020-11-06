@@ -88,6 +88,78 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32):
   return patchx,patchy,y
 
 ########################################################
+def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32):
+  # open LOFAR H5 file, read data from a SAP,
+  # return data for given baseline_id
+
+  f=h5py.File(filename,'r')
+  # select a dataset SAP (int8)
+  g=f['measurement']['saps'][SAP]['visibilities']
+  # scale factors for the dataset (float32)
+  h=f['measurement']['saps'][SAP]['visibility_scale_factors']
+
+  (nbase,ntime,nfreq,npol,ncomplex)=g.shape
+  # h shape : nbase, nfreq, npol
+
+  x=torch.zeros(1,8,ntime,nfreq)
+  
+  mybase=baseline_id
+  # this is 8 channels in torch tensor
+  for ci in range(4):
+    # get visibility scales
+    scalefac=torch.from_numpy(h[mybase,:,ci])
+    # add missing (time) dimension
+    scalefac=scalefac[None,:]
+    x[0,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,2*ci]=x[0,2*ci]*scalefac
+    x[0,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,2*ci+1]=x[0,2*ci+1]*scalefac
+
+
+  stride = patch_size//2 # patch stride (with 1/2 overlap)
+  num_channels=8 # 4x2 polarizationx(real,imag)
+  y = x.unfold(2, patch_size, stride).unfold(3, patch_size, stride)
+  # get new shape
+  (nbase1,nchan1,patchx,patchy,nx,ny)=y.shape
+  # create a new tensor
+  y1=torch.zeros([nbase1*patchx*patchy,nchan1,nx,ny]).to(mydevice,non_blocking=True)
+
+  # copy data ordered according to the patches
+  ck=0
+  for ci in range(patchx):
+   for cj in range(patchy):
+     y1[ck*nbase1:(ck+1)*nbase1,:,:,:]=y[:,:,ci,cj,:,:]
+     ck=ck+1
+
+  y = y1
+  del x,y1
+  # note: nbatch = batch_size x patchx x patchy
+  #(nbatch,nchan,nxx,nyy)=y.shape
+
+  # do some rough cleanup of data
+  ##y[y!=y]=0 # set NaN,Inf to zero
+  torch.clamp(y,-1e6,1e6) # clip high values
+
+  # normalize data
+  ymean=y.mean()
+  ystd=y.std()
+  y.sub_(ymean).div_(ystd)
+
+  return patchx,patchy,y
+
+
+########################################################
+def get_metadata(filename,SAP):
+  # open LOFAR H5 file, read metadata from a SAP,
+  # return baselines, time, frequencies, polarizations, real/imag
+
+  f=h5py.File(filename,'r')
+  # select a dataset SAP (int8)
+  g=f['measurement']['saps'][SAP]['visibilities']
+
+  return g.shape
+ 
+########################################################
 
 ########################################################
 class AutoEncoderCNN(nn.Module):
