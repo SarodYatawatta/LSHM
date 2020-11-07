@@ -35,7 +35,7 @@ sap_list=['1','2']
 L=256 # latent dimension
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=0.1 # loss+alpha*cluster_loss
+alpha=1.0 # loss+alpha*cluster_loss
 gamma=1.0 # loss+gamma*augmentation_loss
 
 
@@ -68,12 +68,43 @@ criterion=nn.MSELoss(reduction='sum')
 optimizer=optim.Adam(params, lr=0.001)
 #optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
+############################################################
+# Augmented loss function
+def augmented_loss(mu,batches_per_bline,batch_size):
+ # process each 'batches_per_bline' rows of mu
+ # total rows : batches_per_bline x batch_size
+ loss=0
+ for ck in range(batch_size):
+   Z=mu[ck*batch_per_bline:(ck+1)*batch_per_bline,:]
+   prod=0
+   for ci in range(batch_per_bline):
+     zi=Z[ci,:]/(torch.norm(Z[ci,:])+1e-6)
+     for cj in range(ci+1,batch_per_bline):
+       zj=Z[cj,:]/(torch.norm(Z[cj,:])+1e-6)
+       prod=prod+torch.exp(-torch.dot(zi,zj))
+   loss=loss+prod/batch_per_bline
+ return loss/batch_size
+
+def augmented_loss1(mu,batches_per_bline,batch_size):
+ # process each 'batches_per_bline' rows of mu
+ # total rows : batches_per_bline x batch_size
+ loss=0
+ for ck in range(batch_size):
+   z=mu[ck*batch_per_bline:(ck+1)*batch_per_bline,:]
+   Z=torch.matmul(z,torch.transpose(z,0,1))
+   numerator=torch.sum(torch.diagonal(Z))
+   denominator=0
+   for ci in range(batch_per_bline):
+     denominator=denominator+torch.sum(Z[ci,ci+1:])/batch_per_bline
+   loss=loss+numerator/(denominator+1e-6)
+ return loss/batch_size
+############################################################
 
 # train network
 for epoch in range(num_epochs):
   for i in range(Niter):
     # get the inputs
-    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size)
+    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True)
     # wrap them in variable
     inputs=Variable(inputs).to(mydevice)
     (nbatch,nchan,nx,ny)=inputs.shape 
@@ -85,20 +116,11 @@ for epoch in range(num_epochs):
         if torch.is_grad_enabled():
          optimizer.zero_grad()
         outputs,mu=net(inputs)
-        loss=criterion(outputs,inputs)
+        loss=criterion(outputs,inputs)/(nbatch*nchan)
         kdist=mod(mu)
-        augmentation_loss=0
-        # process each batch_per_bline rows of mu
-        for ck in range(default_batch):
-          z=mu[ck*batch_per_bline:(ck+1)*batch_per_bline,:]
-          Z=torch.matmul(z,torch.transpose(z,0,1))
-          numerator=torch.sum(torch.diagonal(Z))
-          denominator=0
-          for ci in range(batch_per_bline):
-             denominator=denominator+torch.sum(Z[ci,ci+1:])/batch_per_bline
-          augmentation_loss=augmentation_loss+numerator/(denominator+1e-6)
-        loss=loss/(nbatch*nchan)+alpha*kdist+gamma*augmentation_loss
+        augmentation_loss=augmented_loss(mu,batch_per_bline,default_batch)
         #print('%f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item()))
+        loss=loss+alpha*kdist+gamma*augmentation_loss
         if loss.requires_grad:
           loss.backward()
         return loss

@@ -15,7 +15,7 @@ else:
   mydevice=torch.device('cpu')
 
 ########################################################
-def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32):
+def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False):
   # len(file_list)==len(SAP_list)
   # SAP_list should match each file name in file_list
   # open LOFAR H5 file, read data from a SAP,
@@ -81,9 +81,10 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32):
   torch.clamp(y,-1e6,1e6) # clip high values
 
   # normalize data
-  ymean=y.mean()
-  ystd=y.std()
-  y.sub_(ymean).div_(ystd)
+  if normalize_data:
+   ymean=y.mean()
+   ystd=y.std()
+   y.sub_(ymean).div_(ystd)
 
   return patchx,patchy,y
 
