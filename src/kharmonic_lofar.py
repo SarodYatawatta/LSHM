@@ -35,7 +35,7 @@ sap_list=['1','2']
 L=256 # latent dimension
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=1.0 # loss+alpha*cluster_loss
+alpha=0.1 # loss+alpha*cluster_loss
 gamma=1.0 # loss+gamma*augmentation_loss
 
 
@@ -119,7 +119,7 @@ for epoch in range(num_epochs):
         loss=criterion(outputs,inputs)/(nbatch*nchan)
         kdist=mod(mu)
         augmentation_loss=augmented_loss(mu,batch_per_bline,default_batch)
-        #print('%f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item()))
+        print('%f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item()))
         loss=loss+alpha*kdist+gamma*augmentation_loss
         if loss.requires_grad:
           loss.backward()

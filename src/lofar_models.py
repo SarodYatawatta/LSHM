@@ -319,8 +319,8 @@ class Kmeans(nn.Module):
        # calculate harmonic mean for x := K/ sum_k (1/||x-m_k||^p)
        ek=0
        for ck in range(self.K):
-         ek=ek+1.0/(torch.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+1e-6)
-       loss=loss+self.K/(ek+1e-6)
+         ek=ek+1.0/(torch.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+1e-12)
+       loss=loss+self.K/(ek+1e-12)
      return loss/(nbatch*self.K)
 ########################################################
 
