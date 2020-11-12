@@ -36,7 +36,8 @@ L=256 # latent dimension
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 alpha=0.1 # loss+alpha*cluster_loss
-gamma=1.0 # loss+gamma*augmentation_loss
+beta=1.0 # loss+beta*cluster_similarity (penalty)
+gamma=0.1 # loss+gamma*augmentation_loss
 
 
 from lofar_models import *
@@ -120,10 +121,10 @@ for epoch in range(num_epochs):
         kdist=mod(mu)
         augmentation_loss=augmented_loss(mu,batch_per_bline,default_batch)
         clus_sim=mod.cluster_similarity()
-        print('%f %f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
-        loss=loss+alpha*kdist+gamma*augmentation_loss+clus_sim
+        loss=loss+alpha*kdist+gamma*augmentation_loss+beta*clus_sim
         if loss.requires_grad:
           loss.backward()
+          print('%f %f %f %f'%(loss.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
         return loss
 
     optimizer.step(closure)

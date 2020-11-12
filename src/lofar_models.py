@@ -326,8 +326,9 @@ class Kmeans(nn.Module):
      # take outer product between each rows
      loss=0
      for ci in range(self.K):
+       mnrm=torch.norm(self.M[ci,:],2)
        for cj in range(ci+1,self.K):
-        loss=loss+torch.dot(self.M[ci,:],self.M[cj,:])
-     return loss/(self.K*self.latent_dim)
+        loss=loss+torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.norm(self.M[cj,:],2)+1e-12)
+     return loss/(self.K)
 ########################################################
 
