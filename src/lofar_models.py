@@ -15,13 +15,16 @@ else:
   mydevice=torch.device('cpu')
 
 ########################################################
-def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False):
+def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8):
   # len(file_list)==len(SAP_list)
   # SAP_list should match each file name in file_list
   # open LOFAR H5 file, read data from a SAP,
   # randomly select number of baselines equal to batch_size
   # and sample patches and return input for training
+  # num_channels=4 real,imag XX and YY
+  # num_channels=8 real,imag XX, XY, YX and YY 
   assert(len(file_list)==len(SAP_list))
+  assert(num_channels==4 or num_channels==8)
   file_id=np.random.randint(0,len(file_list))
   filename=file_list[file_id]
   SAP=SAP_list[file_id]
@@ -36,28 +39,46 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
   # h shape : nbase, nfreq, npol
 
-  x=torch.zeros(batch_size,8,ntime,nfreq).to(mydevice,non_blocking=True)
+  x=torch.zeros(batch_size,num_channels,ntime,nfreq).to(mydevice,non_blocking=True)
   # randomly select baseline subset
   baselinelist=np.random.randint(0,nbase,batch_size)
 
   ck=0
   for mybase in baselinelist:
-   # this is 8 channels in torch tensor
-   for ci in range(4):
-    # get visibility scales
-    scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
-    # add missing (time) dimension
-    scalefac=scalefac[None,:]
-    x[ck,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[ck,2*ci]=x[ck,2*ci]*scalefac
-    x[ck,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[ck,2*ci+1]=x[ck,2*ci+1]*scalefac
+   if num_channels==8:
+     # this is 8 channels in torch tensor
+     for ci in range(4):
+      # get visibility scales
+      scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
+      # add missing (time) dimension
+      scalefac=scalefac[None,:]
+      x[ck,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
+      x[ck,2*ci]=x[ck,2*ci]*scalefac
+      x[ck,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
+      x[ck,2*ci+1]=x[ck,2*ci+1]*scalefac
+   else: # num_channels==4
+      ci=0
+      # get visibility scales
+      scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
+      # add missing (time) dimension
+      scalefac=scalefac[None,:]
+      x[ck,0]=torch.from_numpy(g[mybase,:,:,ci,0])
+      x[ck,0]=x[ck,0]*scalefac
+      x[ck,1]=torch.from_numpy(g[mybase,:,:,ci,1])
+      x[ck,1]=x[ck,1]*scalefac
+      ci=3
+      scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
+      scalefac=scalefac[None,:]
+      x[ck,2]=torch.from_numpy(g[mybase,:,:,ci,0])
+      x[ck,2]=x[ck,2]*scalefac
+      x[ck,3]=torch.from_numpy(g[mybase,:,:,ci,1])
+      x[ck,3]=x[ck,3]*scalefac
+
    ck=ck+1
 
 
   #torchvision.utils.save_image(x[0,0].data, 'sample.png')
   stride = patch_size//2 # patch stride (with 1/2 overlap)
-  num_channels=8 # 4x2 polarizationx(real,imag)
   y = x.unfold(2, patch_size, stride).unfold(3, patch_size, stride)
   # get new shape
   (nbase1,nchan1,patchx,patchy,nx,ny)=y.shape
@@ -299,6 +320,65 @@ class AutoEncoderCNN1(nn.Module):
         x=F.elu(self.tconv3(x)) # 1,12,32,32
         x=self.tconv4(x) # 1,channels,64,64
         return torch.tanh(x) # 1,channels,64,64
+
+########################################################
+class AutoEncoderCNN2(nn.Module):
+    # AE CNN 
+    def __init__(self,latent_dim=128,K=10,channels=3):
+        super(AutoEncoderCNN2,self).__init__()
+        self.latent_dim=latent_dim
+        self.K=K
+        # 128x128 -> 64x64
+        self.conv0=nn.Conv2d(channels, 8, 4, stride=2, padding=1)# in channels chan, out 8 chan, kernel 4x4
+        # 64x64 -> 32x32
+        self.conv1=nn.Conv2d(8, 12, 4, stride=2, padding=1)# in channels 8, out 12 chan, kernel 4x4
+        # 32x32 -> 16x16
+        self.conv2=nn.Conv2d(12, 24, 4, stride=2,  padding=1)# in 12 chan, out 24 chan, kernel 4x4
+        # 16x16 -> 8x8
+        self.conv3=nn.Conv2d(24, 48, 4, stride=2,  padding=1)# in 24 chan, out 48 chan, kernel 4x4
+        # 8x8 -> 4x4
+        self.conv4=nn.Conv2d(48, 96, 4, stride=2,  padding=1)# in 48 chan, out 96 chan, kernel 4x4
+        # 4x4 -> 2x2
+        self.conv5=nn.Conv2d(96, 192, 4, stride=2,  padding=1)# in 96 chan, out 192 chan, kernel 4x4
+        # 2x2x192=768
+        self.fc1=nn.Linear(768,self.latent_dim)
+
+        self.fc3=nn.Linear(self.latent_dim,768)
+        self.tconv0=nn.ConvTranspose2d(192,96,4,stride=2,padding=1)
+        self.tconv1=nn.ConvTranspose2d(96,48,4,stride=2,padding=1)
+        self.tconv2=nn.ConvTranspose2d(48,24,4,stride=2,padding=1)
+        self.tconv3=nn.ConvTranspose2d(24,12,4,stride=2,padding=1)
+        self.tconv4=nn.ConvTranspose2d(12,8,4,stride=2,padding=1)
+        self.tconv5=nn.ConvTranspose2d(8,channels,4,stride=2,padding=1)
+
+    def forward(self, x):
+        mu=self.encode(x)
+        return self.decode(mu), mu
+
+    def encode(self, x):
+        #In  1,4,128,128
+        x=F.elu(self.conv0(x)) # 1,8,64,64
+        x=F.elu(self.conv1(x)) # 1,12,32,32
+        x=F.elu(self.conv2(x)) # 1,24,16,16
+        x=F.elu(self.conv3(x)) # 1,48,8,8
+        x=F.elu(self.conv4(x)) # 1,96,4,4
+        x=F.elu(self.conv5(x)) # 1,192,2,2
+        x=torch.flatten(x,start_dim=1) # 1,192*2*2=768
+        x=F.elu(self.fc1(x)) # 1,latent_dim
+        return x # 1,latent_dim
+
+    def decode(self, z):
+        # In 1,latent_dim
+        x=self.fc3(z) # 1,768
+        x=torch.reshape(x,(-1,192,2,2)) # 1,192,2,2
+        x=F.elu(self.tconv0(x)) # 1,96,4,4
+        x=F.elu(self.tconv1(x)) # 1,48,8,8
+        x=F.elu(self.tconv2(x)) # 1,24,16,16
+        x=F.elu(self.tconv3(x)) # 1,12,32,32
+        x=F.elu(self.tconv4(x)) # 1,8,64,64
+        x=self.tconv5(x) # 1,channels,128,128
+        return torch.tanh(x) # 1,channels,128,128
+
 
 
 ########################################################

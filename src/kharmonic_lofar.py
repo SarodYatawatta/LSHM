@@ -17,9 +17,9 @@ else:
   mydevice=torch.device('cpu')
 
 #torch.manual_seed(69)
-default_batch=8 # no. of baselines per iter, batch size determined by how many patches are created
+default_batch=20 # no. of baselines per iter, batch size determined by how many patches are created
 num_epochs=40 # total epochs
-Niter=40 # how many minibatches are considered for an epoch
+Niter=20 # how many minibatches are considered for an epoch
 save_model=True
 load_model=False
 
@@ -43,12 +43,15 @@ gamma=0.1 # loss+gamma*augmentation_loss
 from lofar_models import *
 
 # patch size of images
-patch_size=64
+patch_size=128
 
+num_in_channels=4 # real,imag XX,YY
 # for 32x32 patches
-#net=AutoEncoderCNN(latent_dim=L,K=Kc,channels=8).to(mydevice)
+#net=AutoEncoderCNN(latent_dim=L,K=Kc,channels=num_in_channels).to(mydevice)
 # for 64x64 patches
-net=AutoEncoderCNN1(latent_dim=L,K=Kc,channels=8).to(mydevice)
+#net=AutoEncoderCNN1(latent_dim=L,K=Kc,channels=num_in_channels).to(mydevice)
+# for 128x128 patches
+net=AutoEncoderCNN2(latent_dim=L,K=Kc,channels=num_in_channels).to(mydevice)
 mod=Kmeans(latent_dim=L,K=Kc,p=Khp).to(mydevice)
 
 if load_model:
@@ -105,7 +108,7 @@ def augmented_loss1(mu,batches_per_bline,batch_size):
 for epoch in range(num_epochs):
   for i in range(Niter):
     # get the inputs
-    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True)
+    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True,num_channels=num_in_channels)
     # wrap them in variable
     inputs=Variable(inputs).to(mydevice)
     (nbatch,nchan,nx,ny)=inputs.shape 
@@ -128,7 +131,7 @@ for epoch in range(num_epochs):
         return loss
 
     optimizer.step(closure)
-    print('iter %d/%d loss %f'%(epoch,i,closure().data.item()))
+    #print('iter %d/%d loss %f'%(epoch,i,closure().data.item()))
 
 
 
