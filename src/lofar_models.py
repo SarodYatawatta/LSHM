@@ -110,10 +110,13 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   return patchx,patchy,y
 
 ########################################################
-def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32):
+def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8):
   # open LOFAR H5 file, read data from a SAP,
   # return data for given baseline_id
+  # num_channels=4 real,imag XX and YY
+  # num_channels=8 real,imag XX, XY, YX and YY 
 
+  assert(num_channels==4 or num_channels==8)
   f=h5py.File(filename,'r')
   # select a dataset SAP (int8)
   g=f['measurement']['saps'][SAP]['visibilities']
@@ -123,11 +126,12 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32):
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
   # h shape : nbase, nfreq, npol
 
-  x=torch.zeros(1,8,ntime,nfreq)
+  x=torch.zeros(1,num_channels,ntime,nfreq)
   
   mybase=baseline_id
   # this is 8 channels in torch tensor
-  for ci in range(4):
+  if num_channels==8:
+   for ci in range(4):
     # get visibility scales
     scalefac=torch.from_numpy(h[mybase,:,ci])
     # add missing (time) dimension
@@ -136,10 +140,27 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32):
     x[0,2*ci]=x[0,2*ci]*scalefac
     x[0,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
     x[0,2*ci+1]=x[0,2*ci+1]*scalefac
+  else: # num_channels==4
+    ci=0
+    # get visibility scales
+    scalefac=torch.from_numpy(h[mybase,:,ci])
+    # add missing (time) dimension
+    scalefac=scalefac[None,:]
+    x[0,0]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,0]=x[0,0]*scalefac
+    x[0,1]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,1]=x[0,1]*scalefac
+    ci=3
+    scalefac=torch.from_numpy(h[mybase,:,ci])
+    scalefac=scalefac[None,:]
+    x[0,2]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,2]=x[0,2]*scalefac
+    x[0,3]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,3]=x[0,3]*scalefac
+
 
 
   stride = patch_size//2 # patch stride (with 1/2 overlap)
-  num_channels=8 # 4x2 polarizationx(real,imag)
   y = x.unfold(2, patch_size, stride).unfold(3, patch_size, stride)
   # get new shape
   (nbase1,nchan1,patchx,patchy,nx,ny)=y.shape
@@ -171,10 +192,13 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32):
 
 
 ########################################################
-def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32):
+def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32,num_channels=8):
   # open LOFAR H5 file, read data from a SAP,
   # return data for given baseline_id
   # Note : 'without unfolding' 
+  # num_channels=4 real,imag XX and YY
+  # num_channels=8 real,imag XX, XY, YX and YY 
+  assert(num_channels==4 or num_channels==8)
 
   f=h5py.File(filename,'r')
   # select a dataset SAP (int8)
@@ -185,11 +209,12 @@ def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32):
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
   # h shape : nbase, nfreq, npol
 
-  x=torch.zeros(1,8,ntime,nfreq)
+  x=torch.zeros(1,num_channels,ntime,nfreq)
   
   mybase=baseline_id
-  # this is 8 channels in torch tensor
-  for ci in range(4):
+  if num_channels==8:
+   # this is 8 channels in torch tensor
+   for ci in range(4):
     # get visibility scales
     scalefac=torch.from_numpy(h[mybase,:,ci])
     # add missing (time) dimension
@@ -198,6 +223,23 @@ def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32):
     x[0,2*ci]=x[0,2*ci]*scalefac
     x[0,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
     x[0,2*ci+1]=x[0,2*ci+1]*scalefac
+  else: # num_channels==4
+    ci=0
+    # get visibility scales
+    scalefac=torch.from_numpy(h[mybase,:,ci])
+    # add missing (time) dimension
+    scalefac=scalefac[None,:]
+    x[0,0]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,0]=x[0,0]*scalefac
+    x[0,1]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,1]=x[0,1]*scalefac
+    ci=3
+    scalefac=torch.from_numpy(h[mybase,:,ci])
+    scalefac=scalefac[None,:]
+    x[0,2]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,2]=x[0,2]*scalefac
+    x[0,3]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,3]=x[0,3]*scalefac
 
 
   # do some rough cleanup of data
