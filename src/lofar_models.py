@@ -443,7 +443,9 @@ class Kmeans(nn.Module):
        for ck in range(self.K):
          ek=ek+1.0/(torch.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+1e-12)
        loss=loss+self.K/(ek+1e-12)
-     return loss/(nbatch*self.K)
+     return loss/(nbatch*self.K*self.latent_dim)
+  def clustering_error(self,X):
+    return self.forward(X)
   def cluster_similarity(self):
      # take outer product between each rows
      loss=0
@@ -451,6 +453,6 @@ class Kmeans(nn.Module):
        mnrm=torch.norm(self.M[ci,:],2)
        for cj in range(ci+1,self.K):
         loss=loss+torch.exp(torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.norm(self.M[cj,:],2)+1e-12))
-     return loss/(self.K)
+     return loss/(self.K*self.latent_dim)
 ########################################################
 

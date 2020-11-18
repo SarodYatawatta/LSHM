@@ -5,6 +5,8 @@ Files included are:
 
 ``` lofar_models.py ``` : Methods to read LOFAR H5 data and Autoencoder models.
 
-``` kharmonic_lofar.py ``` : Train K-harmonic autoencoder as well as perform clustering in latent space.
+``` kharmonic_lofar.py ``` : Train K-harmonic autoencoders (in real and Fourier space) as well as perform clustering in latent space.
 
 ``` evaluate_clustering.py ``` : Load trained models and print clustering results for given dataset.
+
+``` lbfgsnew.py ``` : Improved LBFGS optimizer.
