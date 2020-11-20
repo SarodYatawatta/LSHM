@@ -361,7 +361,7 @@ class AutoEncoderCNN1(nn.Module):
         x=F.elu(self.tconv2(x)) # 1,24,16,16
         x=F.elu(self.tconv3(x)) # 1,12,32,32
         x=self.tconv4(x) # 1,channels,64,64
-        return torch.tanh(x) # 1,channels,64,64
+        return x-torch.tanh(x) # 1,channels,64,64
 
 ########################################################
 class AutoEncoderCNN2(nn.Module):
@@ -419,7 +419,7 @@ class AutoEncoderCNN2(nn.Module):
         x=F.elu(self.tconv3(x)) # 1,12,32,32
         x=F.elu(self.tconv4(x)) # 1,8,64,64
         x=self.tconv5(x) # 1,channels,128,128
-        return torch.tanh(x) # 1,channels,128,128
+        return x-torch.tanh(x) # 1,channels,128,128
 
 
 
@@ -447,8 +447,8 @@ class Kmeans(nn.Module):
   def clustering_error(self,X):
     return self.forward(X)
   def cluster_similarity(self):
+     loss=torch.norm(self.M)
      # take outer product between each rows
-     loss=0
      for ci in range(self.K):
        mnrm=torch.norm(self.M[ci,:],2)
        for cj in range(ci+1,self.K):
