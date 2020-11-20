@@ -20,18 +20,21 @@ else:
 #torch.manual_seed(69)
 default_batch=20 # no. of baselines per iter, batch size determined by how many patches are created
 num_epochs=40 # total epochs
-Niter=20 # how many minibatches are considered for an epoch
+Niter=80 # how many minibatches are considered for an epoch
 save_model=True
 load_model=False
 
 # file names have to match the SAP ids in the sap_list
 file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h5',
    '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5',
-   '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5']
-sap_list=['1','2','0','0','1','2']
+   '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5',
+   '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5']
+sap_list=['1','2','0','0','1','2','1','2']
 #file_list=['../../drive/My Drive/Colab Notebooks/L785751.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785751.MS_extract.h5',
-#    '../../drive/My Drive/Colab Notebooks/L785747.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785757.MS_extract.h5']
-#sap_list=['1','2','0','0']
+#    '../../drive/My Drive/Colab Notebooks/L785747.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785757.MS_extract.h5',
+# '../../drive/My Drive/Colab Notebooks/L696315.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L696315.MS_extract.h5',
+# '../../drive/My Drive/Colab Notebooks/L686974.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L686974.MS_extract.h5']
+#sap_list=['1','2','0','0','1','2','1','2']
 
 
 L=256 # latent dimension in real space
@@ -39,7 +42,7 @@ Lf=64 # latent dimension in Fourier space
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 alpha=0.1 # loss+alpha*cluster_loss
-beta=1.0 # loss+beta*cluster_similarity (penalty)
+beta=10.0 # loss+beta*cluster_similarity (penalty)
 gamma=0.1 # loss+gamma*augmentation_loss
 
 
@@ -115,22 +118,37 @@ for epoch in range(num_epochs):
         if torch.is_grad_enabled():
          optimizer.zero_grad()
         xhat,mu=net(x)
-        fftx=torch.fft.fftn(x-xhat,dim=(2,3))
-        y=torch.cat((fftx.real,fftx.imag),1)/(patch_size)
+        fftx=torch.fft.fftn(x-xhat,dim=(2,3),norm='ortho')
+        y=torch.cat((fftx.real,fftx.imag),1)
         yhat,ymu=fnet(y)
         # normalize all losses by number of dimensions of the tensor input
-        loss1=(criterion(xhat,x))/(x.numel())
-        loss2=(criterion(yhat,y))/(y.numel())
+        loss1=10*(criterion(xhat,x))/(x.numel())
+        loss2=(criterion(yhat,y))/(y.numel()/2) # 1/2 because x2 channels
         Mu=torch.cat((mu,ymu),1)
-        kdist=mod.clustering_error(Mu)
-        augmentation_loss=augmented_loss(Mu,batch_per_bline,default_batch)
-        clus_sim=mod.cluster_similarity()
-        loss=loss1+loss2+alpha*kdist+gamma*augmentation_loss+beta*clus_sim
+        kdist=alpha*mod.clustering_error(Mu)
+        clus_sim=beta*mod.cluster_similarity()
+        augmentation_loss=gamma*augmented_loss(Mu,batch_per_bline,default_batch)
+        loss=loss1+loss2+kdist+augmentation_loss+clus_sim
         if loss.requires_grad:
           loss.backward()
           print('%f %f %f %f %f'%(loss1.data.item(),loss2.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
         return loss
 
+    # local method for offline update of clustering
+    def update_clusteting():
+      with torch.no_grad():
+        xhat,mu=net(x)
+        fftx=torch.fft.fftn(x-xhat,dim=(2,3),norm='ortho')
+        y=torch.cat((fftx.real,fftx.imag),1)
+        yhat,ymu=fnet(y)
+        Mu=torch.cat((mu,ymu),1)
+        err1=(mod.clustering_error(Mu).data.item())
+        mod.offline_update(Mu)
+        err2=(mod.clustering_error(Mu).data.item())
+        print('%e %e'%(err1,err2))
+        del xhat,mu,fftx,y,yhat,ymu,Mu
+
+    #update()
     optimizer.step(closure)
     #print('iter %d/%d loss %f'%(epoch,i,closure().data.item()))
 

@@ -361,7 +361,7 @@ class AutoEncoderCNN1(nn.Module):
         x=F.elu(self.tconv2(x)) # 1,24,16,16
         x=F.elu(self.tconv3(x)) # 1,12,32,32
         x=self.tconv4(x) # 1,channels,64,64
-        return x-torch.tanh(x) # 1,channels,64,64
+        return torch.tanh(x) # 1,channels,64,64
 
 ########################################################
 class AutoEncoderCNN2(nn.Module):
@@ -419,7 +419,7 @@ class AutoEncoderCNN2(nn.Module):
         x=F.elu(self.tconv3(x)) # 1,12,32,32
         x=F.elu(self.tconv4(x)) # 1,8,64,64
         x=self.tconv5(x) # 1,channels,128,128
-        return x-torch.tanh(x) # 1,channels,128,128
+        return torch.tanh(x) # 1,channels,128,128
 
 
 
@@ -454,5 +454,36 @@ class Kmeans(nn.Module):
        for cj in range(ci+1,self.K):
         loss=loss+torch.exp(torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.norm(self.M[cj,:],2)+1e-12))
      return loss/(self.K*self.latent_dim)
+  def offline_update(self,X):
+      # update cluster centroids using recursive formula
+      # Eq (7.1-7.5) of B. Zhang - generalized K-harmonic means
+      (nbatch,_)=X.shape
+      alpha=torch.zeros(nbatch)
+      Q=torch.zeros(nbatch,self.K)
+      q=torch.zeros(self.K)
+      P=torch.zeros(nbatch,self.K)
+      # indices i=1..nbatch, k or j=1..K
+      for ci in range(nbatch):
+        # alpha_i := 1/ (sum_k (1/||x_i-m_k||^p))^2
+        ek=0
+        for ck in range(self.K):
+          ek=ek+1.0/(torch.norm(self.M[ck,:]-X[ci,:],2)**(self.p)+1e-12)
+        alpha[ci]=1.0/(ek**2+1e-12)
+        # Q_ij = alpha_i/ ||x_i-m_j||^(p+2)
+        for ck in range(self.K):
+          Q[ci,ck]=alpha[ci]/(torch.norm(self.M[ck,:]-X[ci,:],2)**(self.p+2)+1e-12)
+      # q_j = sum_i Q_ij
+      for ck in range(self.K):
+          q[ck]=torch.sum(Q[:,ck])
+      # P_ij = Q_ij/q_j
+      for ci in range(nbatch):
+        for ck in range(self.K):
+          P[ci,ck]=Q[ci,ck]/q[ck]
+      # M_j = sum_i P_ij x_i
+      for ck in range(self.K):
+        self.M[ck,:]=0
+        for ci in range(nbatch):
+          self.M[ck,:]+=P[ci,ck]*X[ci,:]
+      del P,Q,q,alpha
 ########################################################
 
