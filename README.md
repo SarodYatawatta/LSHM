@@ -10,3 +10,10 @@ Files included are:
 ``` evaluate_clustering.py ``` : Load trained models and print clustering results for given dataset.
 
 ``` lbfgsnew.py ``` : Improved LBFGS optimizer.
+
+
+<img src="arch.png" alt="Architecture of the full system" width="900"/>
+
+
+The above image shows the two autoencoders that extract latent space representations for the real and Fourier space spectrograms.
+
