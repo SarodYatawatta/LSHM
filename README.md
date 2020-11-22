@@ -17,3 +17,8 @@ Files included are:
 
 The above image shows the two autoencoders that extract latent space representations for the real and Fourier space spectrograms.
 
+
+<img src="errors.png" alt="LBFGS vs Adam" width="700"/>
+
+
+Sometimes Adam will diverge (see figure above), and LBFGS will give a more stable result.
