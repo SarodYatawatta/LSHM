@@ -9,6 +9,10 @@ import h5py
 
 import torch.fft
 
+from sklearn.manifold import TSNE
+from matplotlib import pyplot as plt
+import seaborn as sns
+sns.set(rc={'figure.figsize':(11.7,8.27)})
 
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
@@ -47,10 +51,14 @@ file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h
 sap_list=['1','2','0','0','1','2','1','2']
 
 
-which_sap=0 # valid in file_list/sap_list
+which_sap=2 # valid in file_list/sap_list
 
 # get nbase,nfreq,ntime,npol,ncomplex
 nbase,nfreq,ntime,npol,ncomplex=get_metadata(file_list[which_sap],sap_list[which_sap])
+
+X=np.zeros([Kc,nbase],dtype=np.float)
+clusid=np.zeros(nbase,dtype=np.float)
+
 # iterate over each baselines
 for nb in range(nbase):
  patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
@@ -64,14 +72,27 @@ for nb in range(nbase):
  Mu=torch.cat((mu,ymu),1)
  kdist=mod(Mu)
  (nbatch,_)=Mu.shape
- dist=torch.zeros(Kc,1)
+ dist=torch.zeros(Kc)
  for ck in range(Kc):
    for cn in range(nbatch):
      dist[ck]=dist[ck]+(torch.norm(Mu[cn,:]-mod.M[ck,:],2))
  dist=dist/nbatch
- (values,indices)=torch.min(dist,0)
+ X[:,nb]=dist.detach().numpy()
+ (values,indices)=torch.min(dist.view(Kc,1),0)
  print(dist.data)
  print('%d %f %d'%(nb,kdist,indices[0])) 
+ clusid[nb]=indices[0]
  vis=get_data_for_baseline_flat(file_list[which_sap],sap_list[which_sap],baseline_id=nb,num_channels=num_in_channels)
  torchvision.utils.save_image(vis[0,0].data, 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
 
+
+
+
+
+### tSNE
+tsne=TSNE(verbose=True)
+X_emb=tsne.fit_transform(X.transpose())
+uniq=np.unique(clusid)
+snsplot=sns.scatterplot(X_emb[:,0], X_emb[:,1], hue=clusid, legend='full', 
+  palette = sns.color_palette("bright", n_colors=len(uniq)))
+snsplot.figure.savefig('scatter.png')

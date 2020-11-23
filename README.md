@@ -12,13 +12,29 @@ Files included are:
 ``` lbfgsnew.py ``` : Improved LBFGS optimizer.
 
 
-<img src="arch.png" alt="Architecture of the full system" width="900"/>
+<img src="./figures/arch.png" alt="Architecture of the full system" width="900"/>
 
 
 The above image shows the two autoencoders that extract latent space representations for the real and Fourier space spectrograms.
 
 
-<img src="errors.png" alt="LBFGS vs Adam" width="700"/>
+<img src="./figures/errors.png" alt="LBFGS vs Adam" width="500"/>
 
 
 Sometimes Adam will diverge (see figure above), and LBFGS will give a more stable result.
+
+
+
+<img src="./figures/examplepatch.png" alt="Example input/output" width="300"/>
+
+The above figure shows of an example of the autoencoders in action: top left: input **x**, bottom left: output **xhat** of the first autoencoder,
+top right: input **y**, bottom right: output **yhat** of the second autoencoder.
+
+
+Below is one example, the first figure shows the t-SNE plot, and following that, the spectrograms for two closest cluster ids.
+
+<img src="./figures/scatter.png" alt="Example input/output" width="500"/>
+
+<img src="./figures/cluster0.png" alt="Example input/output" width="300"/>
+
+<img src="./figures/cluster1.png" alt="Example input/output" width="300"/>
