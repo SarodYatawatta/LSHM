@@ -25,6 +25,15 @@ patch_size=128
 
 from lofar_models import *
 
+###############################
+def torch_fftshift(real, imag):
+  # only work with dims 2,3
+  for dim in range(2, len(real.size())):
+    real = torch.roll(real, dims=dim, shifts=real.size(dim)//2)
+    imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
+  return real, imag
+###############################
+
 num_in_channels=4 # real,imag XX,YY
 # 32x32 patches
 #net=AutoEncoderCNN(latent_dim=L,K=Kc,channels=8)
@@ -59,6 +68,7 @@ nbase,nfreq,ntime,npol,ncomplex=get_metadata(file_list[which_sap],sap_list[which
 X=np.zeros([Kc,nbase],dtype=np.float)
 clusid=np.zeros(nbase,dtype=np.float)
 
+
 # iterate over each baselines
 for nb in range(nbase):
  patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
@@ -66,7 +76,9 @@ for nb in range(nbase):
  xhat,mu=net(x)
  # perform 2D fft
  fftx=torch.fft.fftn(x-xhat,dim=(2,3),norm='ortho')
- y=torch.cat((fftx.real,fftx.imag),1)
+ # fftshift
+ freal,fimag=torch_fftshift(fftx.real,fftx.imag)
+ y=torch.cat((freal,fimag),1)
  yhat,ymu=fnet(y)
  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),(patch_size*patch_size)*torch.cat((y[0,1].data,yhat[0,1].data))),1).data, 'xx_'+str(nb)+'.png' )
  Mu=torch.cat((mu,ymu),1)

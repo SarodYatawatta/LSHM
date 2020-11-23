@@ -17,12 +17,21 @@ if use_cuda and torch.cuda.is_available():
 else:
   mydevice=torch.device('cpu')
 
+###############################
+def torch_fftshift(real, imag):
+  # only work with dims 2,3
+  for dim in range(2, len(real.size())):
+    real = torch.roll(real, dims=dim, shifts=real.size(dim)//2)
+    imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
+  return real, imag
+###############################
+
 #torch.manual_seed(69)
 default_batch=20 # no. of baselines per iter, batch size determined by how many patches are created
 num_epochs=40 # total epochs
 Niter=80 # how many minibatches are considered for an epoch
 save_model=True
-load_model=False
+load_model=True
 
 # file names have to match the SAP ids in the sap_list
 file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h5',
@@ -41,8 +50,8 @@ L=256 # latent dimension in real space
 Lf=64 # latent dimension in Fourier space
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=0.1 # loss+alpha*cluster_loss
-beta=10.0 # loss+beta*cluster_similarity (penalty)
+alpha=1.0 # loss+alpha*cluster_loss
+beta=1.0 # loss+beta*cluster_similarity (penalty)
 gamma=0.1 # loss+gamma*augmentation_loss
 
 
@@ -76,6 +85,7 @@ if load_model:
 params=list(net.parameters())
 params.extend(list(fnet.parameters()))
 params.extend(list(mod.parameters()))
+#params=list(mod.parameters())
 
 import torch.optim as optim
 from lbfgsnew import LBFGSNew # custom optimizer
@@ -119,7 +129,9 @@ for epoch in range(num_epochs):
          optimizer.zero_grad()
         xhat,mu=net(x)
         fftx=torch.fft.fftn(x-xhat,dim=(2,3),norm='ortho')
-        y=torch.cat((fftx.real,fftx.imag),1)
+        # fftshift
+        freal,fimag=torch_fftshift(fftx.real,fftx.imag)
+        y=torch.cat((freal,fimag),1)
         yhat,ymu=fnet(y)
         # normalize all losses by number of dimensions of the tensor input
         loss1=10*(criterion(xhat,x))/(x.numel())
@@ -139,7 +151,8 @@ for epoch in range(num_epochs):
       with torch.no_grad():
         xhat,mu=net(x)
         fftx=torch.fft.fftn(x-xhat,dim=(2,3),norm='ortho')
-        y=torch.cat((fftx.real,fftx.imag),1)
+        freal,fimag=torch_fftshift(fftx.real,fftx.imag)
+        y=torch.cat((freal,fimag),1)
         yhat,ymu=fnet(y)
         Mu=torch.cat((mu,ymu),1)
         err1=(mod.clustering_error(Mu).data.item())
