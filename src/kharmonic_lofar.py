@@ -17,15 +17,6 @@ if use_cuda and torch.cuda.is_available():
 else:
   mydevice=torch.device('cpu')
 
-###############################
-def torch_fftshift(real, imag):
-  # only work with dims 2,3
-  for dim in range(2, len(real.size())):
-    real = torch.roll(real, dims=dim, shifts=real.size(dim)//2)
-    imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
-  return real, imag
-###############################
-
 #torch.manual_seed(69)
 default_batch=20 # no. of baselines per iter, batch size determined by how many patches are created
 num_epochs=40 # total epochs

@@ -15,6 +15,15 @@ else:
   mydevice=torch.device('cpu')
 
 ########################################################
+def torch_fftshift(real, imag):
+  # FFTshift method, since torch does not have it yet
+  # only work with dims 2,3
+  for dim in range(2, len(real.size())):
+    real = torch.roll(real, dims=dim, shifts=real.size(dim)//2)
+    imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
+  return real, imag
+
+########################################################
 def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8):
   # len(file_list)==len(SAP_list)
   # SAP_list should match each file name in file_list
@@ -419,7 +428,7 @@ class AutoEncoderCNN2(nn.Module):
         x=F.elu(self.tconv3(x)) # 1,12,32,32
         x=F.elu(self.tconv4(x)) # 1,8,64,64
         x=self.tconv5(x) # 1,channels,128,128
-        return torch.tanh(x) # 1,channels,128,128
+        return x # 1,channels,128,128
 
 
 
