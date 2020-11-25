@@ -442,6 +442,7 @@ class Kmeans(nn.Module):
      self.p=p # K harmonic mean order 1/|| ||^p
      # cluster centroids
      self.M=torch.nn.Parameter(torch.rand(self.K,self.latent_dim),requires_grad=True)
+
   def forward(self,X):
      # calculate distance of each X from cluster centroids
      (nbatch,_)=X.shape
@@ -453,16 +454,26 @@ class Kmeans(nn.Module):
          ek=ek+1.0/(torch.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+1e-12)
        loss=loss+self.K/(ek+1e-12)
      return loss/(nbatch*self.K*self.latent_dim)
+
   def clustering_error(self,X):
     return self.forward(X)
+
   def cluster_similarity(self):
-     loss=torch.norm(self.M)
+     # use contrastive loss variant
+     # for each row k, denominator=exp(zk^T zk/||zk||^2)
+     # numerator = sum_l,l\ne k exp(zk^T zl / ||zk|| ||zl||)
+     loss=0
      # take outer product between each rows
      for ci in range(self.K):
        mnrm=torch.norm(self.M[ci,:],2)
-       for cj in range(ci+1,self.K):
-        loss=loss+torch.exp(torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.norm(self.M[cj,:],2)+1e-12))
+       denominator=torch.exp(torch.dot(self.M[ci,:],self.M[ci,:])/(mnrm*mnrm+1e-12))
+       numerator=0
+       for cj in range(self.K):
+        if cj!=ci:
+          numerator=numerator+torch.exp(torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.norm(self.M[cj,:],2)+1e-12))
+       loss=loss+(numerator/(denominator+1e-12))
      return loss/(self.K*self.latent_dim)
+
   def offline_update(self,X):
       # update cluster centroids using recursive formula
       # Eq (7.1-7.5) of B. Zhang - generalized K-harmonic means
