@@ -190,7 +190,7 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8)
 
   # do some rough cleanup of data
   ##y[y!=y]=0 # set NaN,Inf to zero
-  torch.clamp(y,-1e6,1e6) # clip high values
+  y.clamp_(-1e6,1e6) # clip high values
 
   # normalize data
   ymean=y.mean()
@@ -253,7 +253,7 @@ def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32,num_channe
 
   # do some rough cleanup of data
   ##y[y!=y]=0 # set NaN,Inf to zero
-  torch.clamp(x,-1e6,1e6) # clip high values
+  x.clamp_(-1e6,1e6) # clip high values
 
   return x
 
