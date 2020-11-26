@@ -98,7 +98,10 @@ for nb in range(nbase):
  print('%d %f %d'%(nb,kdist,indices[0])) 
  clusid[nb]=indices[0]
  vis=get_data_for_baseline_flat(file_list[which_sap],sap_list[which_sap],baseline_id=nb,num_channels=num_in_channels)
- torchvision.utils.save_image(vis[0,0].data, 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
+ if not colour_output:
+  torchvision.utils.save_image(vis[0,0].data, 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
+ else:
+  torchvision.utils.save_image(channel_to_rgb(vis[0]), 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
 
 
 

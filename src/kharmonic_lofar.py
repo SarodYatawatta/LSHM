@@ -82,8 +82,8 @@ import torch.optim as optim
 from lbfgsnew import LBFGSNew # custom optimizer
 criterion=nn.MSELoss(reduction='sum')
 #optimizer=optim.SGD(params, lr=0.001, momentum=0.9)
-#optimizer=optim.Adam(params, lr=0.001)
-optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
+optimizer=optim.Adam(params, lr=0.001)
+#optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
 ############################################################
 # Augmented loss function
