@@ -23,16 +23,10 @@ Khp=4 # order of K harmonic mean 1/|| ||^p norm
 
 patch_size=128
 
-from lofar_models import *
+# enable this to create psuedocolor images using all XX and YY
+colour_output=True
 
-###############################
-def torch_fftshift(real, imag):
-  # only work with dims 2,3
-  for dim in range(2, len(real.size())):
-    real = torch.roll(real, dims=dim, shifts=real.size(dim)//2)
-    imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
-  return real, imag
-###############################
+from lofar_models import *
 
 num_in_channels=4 # real,imag XX,YY
 # 32x32 patches
@@ -79,8 +73,17 @@ for nb in range(nbase):
  # fftshift
  freal,fimag=torch_fftshift(fftx.real,fftx.imag)
  y=torch.cat((freal,fimag),1)
+ # clamp high values data
+ y.clamp_(min=-10,max=10)
  yhat,ymu=fnet(y)
- torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),(patch_size*patch_size)*torch.cat((y[0,1].data,yhat[0,1].data))),1).data, 'xx_'+str(nb)+'.png' )
+ if not colour_output:
+  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),(patch_size*patch_size)*torch.cat((y[0,1],yhat[0,1]))),1).data, 'xx_'+str(nb)+'.png' )
+ else:
+  x0=channel_to_rgb(x[0])
+  xhat0=channel_to_rgb(xhat[0])
+  y0=channel_to_rgb(y[0,0:4])
+  yhat0=channel_to_rgb(yhat[0,0:4])
+  torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),torch.cat((y0,yhat0),1)),2).data, 'xx_'+str(nb)+'.png' )
  Mu=torch.cat((mu,ymu),1)
  kdist=mod(Mu)
  (nbatch,_)=Mu.shape

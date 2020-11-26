@@ -23,6 +23,24 @@ def torch_fftshift(real, imag):
     imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
   return real, imag
 
+###############################
+def channel_to_rgb(x):
+  # x: 4 x nx x ny image
+  # output 3 x nx ny image for RGB plot
+  (nchan,nx,ny)=x.shape
+  assert(nchan==4)
+
+  # normalize
+  xmean=x.mean()
+  xstd=x.std()
+  x.sub_(xmean).div_(xstd)
+
+  y=torch.zeros(3,nx,ny)
+  y[0]=(x[0]+0.3*x[1])/1.3
+  y[1]=(0.7*x[1]+0.7*x[2])/1.4
+  y[2]=(0.3*x[2]+x[3])/1.3
+  return y
+
 ########################################################
 def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8):
   # len(file_list)==len(SAP_list)
