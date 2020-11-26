@@ -108,7 +108,7 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
 
   # do some rough cleanup of data
   ##y[y!=y]=0 # set NaN,Inf to zero
-  torch.clamp(y,-1e6,1e6) # clip high values
+  y.clamp_(-1e6,1e6) # clip high values
 
   # normalize data
   if normalize_data:
@@ -466,6 +466,7 @@ class Kmeans(nn.Module):
      # take outer product between each rows
      for ci in range(self.K):
        mnrm=torch.norm(self.M[ci,:],2)
+       # denominator is actually=1
        denominator=torch.exp(torch.dot(self.M[ci,:],self.M[ci,:])/(mnrm*mnrm+1e-12))
        numerator=0
        for cj in range(self.K):
