@@ -41,7 +41,7 @@ L=256 # latent dimension in real space
 Lf=64 # latent dimension in Fourier space
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=1.0 # loss+alpha*cluster_loss
+alpha=100.0 # loss+alpha*cluster_loss
 beta=1.0 # loss+beta*cluster_similarity (penalty)
 gamma=0.1 # loss+gamma*augmentation_loss
 
@@ -82,8 +82,8 @@ import torch.optim as optim
 from lbfgsnew import LBFGSNew # custom optimizer
 criterion=nn.MSELoss(reduction='sum')
 #optimizer=optim.SGD(params, lr=0.001, momentum=0.9)
-optimizer=optim.Adam(params, lr=0.001)
-#optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
+#optimizer=optim.Adam(params, lr=0.001)
+optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
 ############################################################
 # Augmented loss function
@@ -123,9 +123,11 @@ for epoch in range(num_epochs):
         # fftshift
         freal,fimag=torch_fftshift(fftx.real,fftx.imag)
         y=torch.cat((freal,fimag),1)
+        # clamp high values data
+        y.clamp_(min=-10,max=10)
         yhat,ymu=fnet(y)
         # normalize all losses by number of dimensions of the tensor input
-        loss1=10*(criterion(xhat,x))/(x.numel())
+        loss1=(criterion(xhat,x))/(x.numel())
         loss2=(criterion(yhat,y))/(y.numel()/2) # 1/2 because x2 channels
         Mu=torch.cat((mu,ymu),1)
         kdist=alpha*mod.clustering_error(Mu)
@@ -134,7 +136,7 @@ for epoch in range(num_epochs):
         loss=loss1+loss2+kdist+augmentation_loss+clus_sim
         if loss.requires_grad:
           loss.backward()
-          print('%f %f %f %f %f'%(loss1.data.item(),loss2.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
+          print('%d %d %f %f %f %f %f'%(epoch,i,loss1.data.item(),loss2.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
         return loss
 
     # local method for offline update of clustering
