@@ -14,6 +14,8 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 sns.set(rc={'figure.figsize':(11.7,8.27)})
 
+from sklearn.cluster import AgglomerativeClustering
+
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
 L=256 # latent dimension
@@ -50,9 +52,12 @@ torchvision.utils.save_image(mod.M.data,'M.png')
 file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h5',
    '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5',
    '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5',
-   '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5']
-sap_list=['1','2','0','0','1','2','1','2']
-
+   '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5',
+   '/home/sarod/L798736.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5',
+   '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5',
+   '/home/sarod/L672470.MS_extract.h5'
+  ]
+sap_list=['1','2','0','0','1','2','1','2','0','0','1','1','2']
 
 which_sap=2 # valid in file_list/sap_list
 
@@ -94,15 +99,8 @@ for nb in range(nbase):
  dist=dist/nbatch
  X[:,nb]=dist.detach().numpy()
  (values,indices)=torch.min(dist.view(Kc,1),0)
- print(dist.data)
- print('%d %f %d'%(nb,kdist,indices[0])) 
+ print('%d %e %d'%(nb,kdist,indices[0])) 
  clusid[nb]=indices[0]
- vis=get_data_for_baseline_flat(file_list[which_sap],sap_list[which_sap],baseline_id=nb,num_channels=num_in_channels)
- if not colour_output:
-  torchvision.utils.save_image(vis[0,0].data, 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
- else:
-  torchvision.utils.save_image(channel_to_rgb(vis[0]), 'b'+str(indices[0].data.item())+'_'+str(nb)+'.png')
-
 
 
 
@@ -114,3 +112,31 @@ uniq=np.unique(clusid)
 snsplot=sns.scatterplot(X_emb[:,0], X_emb[:,1], hue=clusid, legend='full', 
   palette = sns.color_palette("bright", n_colors=len(uniq)))
 snsplot.figure.savefig('scatter.png')
+
+### final clustering
+db=AgglomerativeClustering(linkage='average',n_clusters=10).fit(X_emb)
+# Number of clusters in labels, ignoring noise if present.
+n_clusters_ = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
+n_noise_ = list(db.labels_).count(-1)
+
+# Black removed and is used for noise instead.
+unique_labels = set(db.labels_)
+colors = [plt.cm.Spectral(each)
+  for each in np.linspace(0, 1, len(unique_labels))]
+for k, col in zip(unique_labels, colors):
+  class_member_mask = (db.labels_ == k)
+  xy = X_emb[class_member_mask]
+  plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=tuple(col),
+    markeredgecolor='k', markersize=14)
+
+plt.legend(labels=np.unique(db.labels_))
+plt.title('Number of clusters: %d' % n_clusters_)
+plt.savefig('clusters.png')
+
+
+for nb in range(nbase):
+ vis=get_data_for_baseline_flat(file_list[which_sap],sap_list[which_sap],baseline_id=nb,num_channels=num_in_channels)
+ if not colour_output:
+  torchvision.utils.save_image(vis[0,0].data, 'b'+str(db.labels_[nb])+'_'+str(nb)+'.png')
+ else:
+  torchvision.utils.save_image(channel_to_rgb(vis[0]), 'b'+str(db.labels_[nb])+'_'+str(nb)+'.png')
