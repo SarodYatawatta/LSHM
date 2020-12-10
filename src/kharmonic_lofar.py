@@ -28,8 +28,18 @@ load_model=True
 file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h5',
    '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5',
    '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5',
-   '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5']
-sap_list=['1','2','0','0','1','2','1','2']
+   '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5',
+   '/home/sarod/L798736.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5',
+   '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5',
+   '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5',
+   '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5',
+   '/home/sarod/L682620.MS_extract.h5', 
+   '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5',
+   '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5',
+   ]
+sap_list=['1','2','0','0','1','2','1','2','0','0',
+          '1','1','2','1','2','1','2','1','2','1',
+          '2']
 #file_list=['../../drive/My Drive/Colab Notebooks/L785751.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785751.MS_extract.h5',
 #    '../../drive/My Drive/Colab Notebooks/L785747.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785757.MS_extract.h5',
 # '../../drive/My Drive/Colab Notebooks/L696315.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L696315.MS_extract.h5',
@@ -41,7 +51,7 @@ L=256 # latent dimension in real space
 Lf=64 # latent dimension in Fourier space
 Kc=10 # clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=100.0 # loss+alpha*cluster_loss
+alpha=1000.0 # loss+alpha*cluster_loss
 beta=1.0 # loss+beta*cluster_similarity (penalty)
 gamma=0.1 # loss+gamma*augmentation_loss
 
@@ -82,8 +92,8 @@ import torch.optim as optim
 from lbfgsnew import LBFGSNew # custom optimizer
 criterion=nn.MSELoss(reduction='sum')
 #optimizer=optim.SGD(params, lr=0.001, momentum=0.9)
-optimizer=optim.Adam(params, lr=0.001)
-#optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
+#optimizer=optim.Adam(params, lr=0.001)
+optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
 ############################################################
 # Augmented loss function

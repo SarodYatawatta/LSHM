@@ -1,9 +1,5 @@
-from torch.autograd import Variable
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torchvision
-import torchvision.transforms as transforms
 import numpy as np
 import h5py
 
@@ -15,6 +11,7 @@ import seaborn as sns
 sns.set(rc={'figure.figsize':(11.7,8.27)})
 
 from sklearn.cluster import AgglomerativeClustering
+from sklearn.preprocessing import StandardScaler
 
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
@@ -55,11 +52,17 @@ file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h
    '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5',
    '/home/sarod/L798736.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5',
    '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5',
-   '/home/sarod/L672470.MS_extract.h5'
+   '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5',
+   '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5',
+   '/home/sarod/L682620.MS_extract.h5', 
+   '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5', 
+   '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5',
   ]
-sap_list=['1','2','0','0','1','2','1','2','0','0','1','1','2']
+sap_list=['1','2','0','0','1','2','1','2','0','0',
+          '1','1','2','1','2','1','2','1','2','1',
+          '2']
 
-which_sap=2 # valid in file_list/sap_list
+which_sap=0 # valid in file_list/sap_list
 
 # get nbase,nfreq,ntime,npol,ncomplex
 nbase,nfreq,ntime,npol,ncomplex=get_metadata(file_list[which_sap],sap_list[which_sap])
@@ -114,12 +117,13 @@ snsplot=sns.scatterplot(X_emb[:,0], X_emb[:,1], hue=clusid, legend='full',
 snsplot.figure.savefig('scatter.png')
 
 ### final clustering
-db=AgglomerativeClustering(linkage='average',n_clusters=10).fit(X_emb)
+scaler=StandardScaler()
+X_embsc=scaler.fit_transform(X_emb)
+db=AgglomerativeClustering(linkage='average',n_clusters=10).fit(X_embsc)
+#db=DBSCAN(eps=0.3).fit(X_embsc)
 # Number of clusters in labels, ignoring noise if present.
 n_clusters_ = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
-n_noise_ = list(db.labels_).count(-1)
 
-# Black removed and is used for noise instead.
 unique_labels = set(db.labels_)
 colors = [plt.cm.Spectral(each)
   for each in np.linspace(0, 1, len(unique_labels))]
