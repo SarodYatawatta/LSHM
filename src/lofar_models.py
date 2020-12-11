@@ -302,6 +302,8 @@ def get_fileSAP(pathname,pattern='L*.MS_extract.h5'):
     f=h5py.File(filename,'r')
     g=f['measurement']['saps']
     SAPs=[SAP for SAP in g]
+    # flag to remember if this file is useful
+    fileused=False
     if len(SAPs)>0:
      for SAP in SAPs:
       try:
@@ -311,8 +313,12 @@ def get_fileSAP(pathname,pattern='L*.MS_extract.h5'):
        if nbase>1 and nfreq>=128 and ntime>=128 and npol==4 and reim==2:
          file_list.append(filename)
          sap_list.append(SAP)
+         fileused=True
       except:
        print('Failed opening'+filename)
+    
+    if not fileused:
+      print('File '+filename+' not used') 
 
   return file_list,sap_list
 ########################################################
