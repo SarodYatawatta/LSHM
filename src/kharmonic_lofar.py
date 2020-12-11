@@ -8,6 +8,7 @@ import numpy as np
 import h5py
 import torch.fft
 
+from lofar_models import *
 # Train autoencoder and k-harmonic mean clustering using LOFAR data
 
 # (try to) use a GPU for computation?
@@ -24,28 +25,10 @@ Niter=80 # how many minibatches are considered for an epoch
 save_model=True
 load_model=True
 
+# scan directory to get valid datasets
 # file names have to match the SAP ids in the sap_list
-file_list=['/home/sarod/L785751.MS_extract.h5','/home/sarod/L785751.MS_extract.h5',
-   '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5',
-   '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5',
-   '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5',
-   '/home/sarod/L798736.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5',
-   '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5',
-   '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5',
-   '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5',
-   '/home/sarod/L682620.MS_extract.h5', 
-   '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5',
-   '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5',
-   ]
-sap_list=['1','2','0','0','1','2','1','2','0','0',
-          '1','1','2','1','2','1','2','1','2','1',
-          '2']
-#file_list=['../../drive/My Drive/Colab Notebooks/L785751.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785751.MS_extract.h5',
-#    '../../drive/My Drive/Colab Notebooks/L785747.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L785757.MS_extract.h5',
-# '../../drive/My Drive/Colab Notebooks/L696315.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L696315.MS_extract.h5',
-# '../../drive/My Drive/Colab Notebooks/L686974.MS_extract.h5','../../drive/My Drive/Colab Notebooks/L686974.MS_extract.h5']
-#sap_list=['1','2','0','0','1','2','1','2']
-
+file_list,sap_list=get_fileSAP('/home/sarod')
+# or ../../drive/My Drive/Colab Notebooks/
 
 L=256 # latent dimension in real space
 Lf=64 # latent dimension in Fourier space
@@ -55,8 +38,6 @@ alpha=1000.0 # loss+alpha*cluster_loss
 beta=1.0 # loss+beta*cluster_similarity (penalty)
 gamma=0.1 # loss+gamma*augmentation_loss
 
-
-from lofar_models import *
 
 # patch size of images
 patch_size=128

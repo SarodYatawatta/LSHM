@@ -6,6 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 import numpy as np
 import h5py
+import glob
 
 # (try to) use a GPU for computation?
 use_cuda=True
@@ -287,6 +288,33 @@ def get_metadata(filename,SAP):
 
   return g.shape
  
+
+########################################################
+def get_fileSAP(pathname,pattern='L*.MS_extract.h5'):
+  # search in pathname for files matching 'pattern'
+  # test valid SAPs in each file and
+  # return file_list,sap_list for valid files and their SAPs
+  file_list=[]
+  sap_list=[]
+  rawlist=glob.glob(pathname+'/'+pattern)
+  # open each file and check valid saps
+  for filename in rawlist:
+    f=h5py.File(filename,'r')
+    g=f['measurement']['saps']
+    SAPs=[SAP for SAP in g]
+    if len(SAPs)>0:
+     for SAP in SAPs:
+      try:
+       vis=f['measurement']['saps'][SAP]['visibilities']
+       (nbase,ntime,nfreq,npol,reim)=vis.shape
+       # select valid datasets
+       if nbase>1 and nfreq>=128 and ntime>=128 and npol==4 and reim==2:
+         file_list.append(filename)
+         sap_list.append(SAP)
+      except:
+       print('Failed opening'+filename)
+
+  return file_list,sap_list
 ########################################################
 
 ########################################################
