@@ -67,7 +67,8 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
   # h shape : nbase, nfreq, npol
 
-  x=torch.zeros(batch_size,num_channels,ntime,nfreq).to(mydevice,non_blocking=True)
+  # pad zeros if ntime or nfreq is smaller than patch_size
+  x=torch.zeros(batch_size,num_channels,max(ntime,patch_size),max(nfreq,patch_size)).to(mydevice,non_blocking=True)
   # randomly select baseline subset
   baselinelist=np.random.randint(0,nbase,batch_size)
 
@@ -80,27 +81,27 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
       scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
       # add missing (time) dimension
       scalefac=scalefac[None,:]
-      x[ck,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
-      x[ck,2*ci]=x[ck,2*ci]*scalefac
-      x[ck,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
-      x[ck,2*ci+1]=x[ck,2*ci+1]*scalefac
+      x[ck,2*ci,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
+      x[ck,2*ci,:ntime,:nfreq]=x[ck,2*ci,:ntime,:nfreq]*scalefac
+      x[ck,2*ci+1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
+      x[ck,2*ci+1,:ntime,:nfreq]=x[ck,2*ci+1,:ntime,:nfreq]*scalefac
    else: # num_channels==4
       ci=0
       # get visibility scales
       scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
       # add missing (time) dimension
       scalefac=scalefac[None,:]
-      x[ck,0]=torch.from_numpy(g[mybase,:,:,ci,0])
-      x[ck,0]=x[ck,0]*scalefac
-      x[ck,1]=torch.from_numpy(g[mybase,:,:,ci,1])
-      x[ck,1]=x[ck,1]*scalefac
+      x[ck,0,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
+      x[ck,0,:ntime,:nfreq]=x[ck,0,:ntime,:nfreq]*scalefac
+      x[ck,1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
+      x[ck,1,:ntime,:nfreq]=x[ck,1,:ntime,:nfreq]*scalefac
       ci=3
       scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
       scalefac=scalefac[None,:]
-      x[ck,2]=torch.from_numpy(g[mybase,:,:,ci,0])
-      x[ck,2]=x[ck,2]*scalefac
-      x[ck,3]=torch.from_numpy(g[mybase,:,:,ci,1])
-      x[ck,3]=x[ck,3]*scalefac
+      x[ck,2,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
+      x[ck,2,:ntime,:nfreq]=x[ck,2,:ntime,:nfreq]*scalefac
+      x[ck,3,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
+      x[ck,3,:ntime,:nfreq]=x[ck,3,:ntime,:nfreq]*scalefac
 
    ck=ck+1
 
@@ -154,7 +155,8 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8)
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
   # h shape : nbase, nfreq, npol
 
-  x=torch.zeros(1,num_channels,ntime,nfreq)
+  # pad zeros if ntime or nfreq is smaller than patch_size
+  x=torch.zeros(1,num_channels,max(ntime,patch_size),max(nfreq,patch_size))
   
   mybase=baseline_id
   # this is 8 channels in torch tensor
@@ -164,27 +166,27 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8)
     scalefac=torch.from_numpy(h[mybase,:,ci])
     # add missing (time) dimension
     scalefac=scalefac[None,:]
-    x[0,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,2*ci]=x[0,2*ci]*scalefac
-    x[0,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,2*ci+1]=x[0,2*ci+1]*scalefac
+    x[0,2*ci,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,2*ci,:ntime,:nfreq]=x[0,2*ci,:ntime,:nfreq]*scalefac
+    x[0,2*ci+1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,2*ci+1,:ntime,:nfreq]=x[0,2*ci+1,:ntime,:nfreq]*scalefac
   else: # num_channels==4
     ci=0
     # get visibility scales
     scalefac=torch.from_numpy(h[mybase,:,ci])
     # add missing (time) dimension
     scalefac=scalefac[None,:]
-    x[0,0]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,0]=x[0,0]*scalefac
-    x[0,1]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,1]=x[0,1]*scalefac
+    x[0,0,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,0,:ntime,:nfreq]=x[0,0,:ntime,:nfreq]*scalefac
+    x[0,1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,1,:ntime,:nfreq]=x[0,1,:ntime,:nfreq]*scalefac
     ci=3
     scalefac=torch.from_numpy(h[mybase,:,ci])
     scalefac=scalefac[None,:]
-    x[0,2]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,2]=x[0,2]*scalefac
-    x[0,3]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,3]=x[0,3]*scalefac
+    x[0,2,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
+    x[0,2,:ntime,:nfreq]=x[0,2,:ntime,:nfreq]*scalefac
+    x[0,3,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
+    x[0,3,:ntime,:nfreq]=x[0,3,:ntime,:nfreq]*scalefac
 
 
 
@@ -309,8 +311,8 @@ def get_fileSAP(pathname,pattern='L*.MS_extract.h5'):
       try:
        vis=f['measurement']['saps'][SAP]['visibilities']
        (nbase,ntime,nfreq,npol,reim)=vis.shape
-       # select valid datasets
-       if nbase>1 and nfreq>=128 and ntime>=128 and npol==4 and reim==2:
+       # select valid datasets (larger than 90 say)
+       if nbase>1 and nfreq>=90 and ntime>=90 and npol==4 and reim==2:
          file_list.append(filename)
          sap_list.append(SAP)
          fileused=True
