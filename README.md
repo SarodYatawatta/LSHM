@@ -1,5 +1,5 @@
 # LSHM : LOFAR System Health Management
-We use a cascaded autoencoder duo with k-harmonic clustering to learn features in LOFAR spectrograms. We combine [Deep K-means](https://arxiv.org/abs/1806.10069) and [K Harmonic means](https://www.hpl.hp.com/techreports/2000/HPL-2000-137.html) to implement deep-K-Harmonic means clustering.
+We use a cascaded autoencoder duo with k-harmonic clustering to learn features in LOFAR spectrograms. The autoencoders work in the real space and the Fourier space of the spectrograms. We combine [Deep K-means](https://arxiv.org/abs/1806.10069) and [K Harmonic means](https://www.hpl.hp.com/techreports/2000/HPL-2000-137.html) to implement deep-K-Harmonic means clustering.
 
 Files included are:
 
