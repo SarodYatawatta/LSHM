@@ -17,8 +17,9 @@ from sklearn.preprocessing import StandardScaler
 
 L=256 # latent dimension
 Lf=64 # latent dimension
-Kc=10 # clusters
+Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
+Ko=10 # final hard clusters
 
 patch_size=128
 
@@ -49,7 +50,7 @@ torchvision.utils.save_image(mod.M.data,'M.png')
 file_list=['/home/sarod/L798736.MS_extract.h5', '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L703385.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5']
 sap_list=['0', '0', '1', '1', '2', '1', '2', '0', '1', '2', '0', '1', '2', '1', '2', '1', '2', '1', '2', '1', '2', '0', '1', '2', '1', '2']
 
-which_sap=-7 # valid in file_list/sap_list -7
+which_sap=-17 # valid in file_list/sap_list -7
 
 # get nbase,nfreq,ntime,npol,ncomplex
 nbase,nfreq,ntime,npol,ncomplex=get_metadata(file_list[which_sap],sap_list[which_sap])
@@ -96,7 +97,7 @@ for nb in range(nbase):
 
 
 ### tSNE
-tsne=TSNE(verbose=True)
+tsne=TSNE(n_components=2,random_state=99,verbose=True)
 X_emb=tsne.fit_transform(X.transpose())
 uniq=np.unique(clusid)
 snsplot=sns.scatterplot(X_emb[:,0], X_emb[:,1], hue=clusid, legend='full', 
@@ -106,7 +107,7 @@ snsplot.figure.savefig('scatter.png')
 ### final clustering
 scaler=StandardScaler()
 X_embsc=scaler.fit_transform(X_emb)
-db=AgglomerativeClustering(linkage='average',n_clusters=10).fit(X_embsc)
+db=AgglomerativeClustering(linkage='average',n_clusters=Ko).fit(X_embsc)
 #db=DBSCAN(eps=0.3).fit(X_embsc)
 # Number of clusters in labels, ignoring noise if present.
 n_clusters_ = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
