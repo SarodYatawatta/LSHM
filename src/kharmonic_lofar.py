@@ -8,6 +8,8 @@ import numpy as np
 import h5py
 import torch.fft
 
+# Note: use_cuda=True is set in lofar_models.py, so make sure to change it
+# if you change it in this script as well
 from lofar_models import *
 # Train autoencoder and k-harmonic mean clustering using LOFAR data
 
@@ -22,8 +24,10 @@ else:
 default_batch=20 # no. of baselines per iter, batch size determined by how many patches are created
 num_epochs=40 # total epochs
 Niter=80 # how many minibatches are considered for an epoch
-save_model=True
-load_model=True
+save_model=False
+load_model=False
+# to use random affine transforms to augment original data
+transform_data=True
 
 # scan directory to get valid datasets
 # file names have to match the SAP ids in the sap_list
@@ -94,17 +98,29 @@ def augmented_loss(mu,batches_per_bline,batch_size):
  return loss/(batch_size*batch_per_bline)
 ############################################################
 
+
+# Random affine transform to transform data
+if transform_data:
+  mytransform=transforms.RandomAffine(degrees=(-90,90),translate=None,scale=(1,3),shear=0.1,fill=0,interpolation=transforms.InterpolationMode.NEAREST)
+else:
+  mytransform=None
+
 # train network
 for epoch in range(num_epochs):
   for i in range(Niter):
     # get the inputs
-    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True,num_channels=num_in_channels)
+    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True,num_channels=num_in_channels,transform=mytransform)
     # wrap them in variable
     x=Variable(inputs).to(mydevice)
     (nbatch,nchan,nx,ny)=inputs.shape 
-    # nbatch = patchx x patchy x default_batch
-    # i.e., one baseline (per polarization, real,imag) will create patchx x patchy batches
-    batch_per_bline=patchx*patchy
+    # is trasform_data=None, nbatch = patchx x patchy x default_batch
+    # else, nbatch = 2 x patchx x patchy x default_batch
+
+    # i.e., one baseline (per polarization, real,imag) will create (2) x patchx x patchy batches
+    if transform_data:
+     batch_per_bline=2*patchx*patchy
+    else:
+     batch_per_bline=patchx*patchy
     
     def closure():
         if torch.is_grad_enabled():

@@ -50,13 +50,13 @@ torchvision.utils.save_image(mod.M.data,'M.png')
 file_list=['/home/sarod/L798736.MS_extract.h5', '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L703385.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5']
 sap_list=['0', '0', '1', '1', '2', '1', '2', '0', '1', '2', '0', '1', '2', '1', '2', '1', '2', '1', '2', '1', '2', '0', '1', '2', '1', '2']
 
-which_sap=-17 # valid in file_list/sap_list -7
+which_sap=-16 # valid in file_list/sap_list -7
 
 # get nbase,nfreq,ntime,npol,ncomplex
 nbase,nfreq,ntime,npol,ncomplex=get_metadata(file_list[which_sap],sap_list[which_sap])
 
-X=np.zeros([Kc,nbase],dtype=np.float)
-clusid=np.zeros(nbase,dtype=np.float)
+X=np.zeros([Kc,nbase],dtype=np.float64)
+clusid=np.zeros(nbase,dtype=np.float64)
 
 
 # iterate over each baselines

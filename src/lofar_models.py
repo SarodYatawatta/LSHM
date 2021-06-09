@@ -43,7 +43,7 @@ def channel_to_rgb(x):
   return y
 
 ########################################################
-def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8):
+def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8,transform=None):
   # len(file_list)==len(SAP_list)
   # SAP_list should match each file name in file_list
   # open LOFAR H5 file, read data from a SAP,
@@ -51,6 +51,11 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   # and sample patches and return input for training
   # num_channels=4 real,imag XX and YY
   # num_channels=8 real,imag XX, XY, YX and YY 
+  # if transform (torchvision.transforms) is given (not None)
+  # each baseline patches will be transformed, and appended to the original data
+  # in other words, the number of patches output will be 2 times the original value
+  # the original and transformed data will be grouped according to the baselines
+
   assert(len(file_list)==len(SAP_list))
   assert(num_channels==4 or num_channels==8)
   file_id=np.random.randint(0,len(file_list))
@@ -136,6 +141,17 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
    ystd=y.std()
    y.sub_(ymean).div_(ystd)
 
+  # transform
+  if transform:
+    # create empty data (first dimension will be 2x  original)
+    y1=torch.zeros(2*nbase1*patchx*patchy,nchan1,nx,ny).to(mydevice,non_blocking=True)
+    # interleave original and transformed data according to the baseline
+    for ci in range(nbase1):
+      y1[2*ci*patchx*patchy:(2*ci+1)*patchx*patchy]=y[ci*patchx*patchy:(ci+1)*patchx*patchy]
+      y1[(2*ci+1)*patchx*patchy:(2*ci+2)*patchx*patchy]=transform(y[ci*patchx*patchy:(ci+1)*patchx*patchy])
+    y=y1
+
+  # Note: if transform is given, size of y is doubled
   return patchx,patchy,y
 
 ########################################################
