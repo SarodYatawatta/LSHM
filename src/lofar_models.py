@@ -7,7 +7,10 @@ import torchvision.transforms as transforms
 import numpy as np
 import h5py
 import glob
+import os
 
+# Should we recursively search for training data?
+rec_file_search=True
 # (try to) use a GPU for computation?
 use_cuda=True
 if use_cuda and torch.cuda.is_available():
@@ -314,7 +317,10 @@ def get_fileSAP(pathname,pattern='L*.MS_extract.h5'):
   # return file_list,sap_list for valid files and their SAPs
   file_list=[]
   sap_list=[]
-  rawlist=glob.glob(pathname+'/'+pattern)
+  if rec_file_search:
+    rawlist = glob.glob(pathname+'**'+os.sep+pattern,recursive=True)
+  else:
+    rawlist=glob.glob(pathname+os.sep+pattern)
   # open each file and check valid saps
   for filename in rawlist:
     f=h5py.File(filename,'r')

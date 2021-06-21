@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Exclude models from getting committed to repo
+*.model
+
+# Exclude vscode folders/files
+.vscode/
