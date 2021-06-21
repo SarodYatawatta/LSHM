@@ -85,10 +85,10 @@ optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,bat
 def augmented_loss(mu,batches_per_bline,batch_size):
  # process each 'batches_per_bline' rows of mu
  # total rows : batches_per_bline x batch_size
- loss=0
+ loss=torch.Tensor(torch.zeros(1)).to(mydevice)
  for ck in range(batch_size):
    Z=mu[ck*batch_per_bline:(ck+1)*batch_per_bline,:]
-   prod=0
+   prod=torch.Tensor(torch.zeros(1)).to(mydevice)
    for ci in range(batch_per_bline):
      zi=Z[ci,:]/(torch.norm(Z[ci,:])+1e-6)
      for cj in range(ci+1,batch_per_bline):
