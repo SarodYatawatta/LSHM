@@ -20,9 +20,12 @@ The above image shows the two autoencoders that extract latent space representat
 
 <img src="./figures/errors.png" alt="LBFGS vs Adam" width="500"/>
 
+## How to train
+Sometimes Adam will diverge (see figure above), and LBFGS will give a more stable result. Here is a training strategy that will generally work:
 
-Sometimes Adam will diverge (see figure above), and LBFGS will give a more stable result.
-
+ - Set alpha=beta=gamma=0.001 (a low value), use Adam for training the autoencoders, a few epochs.
+ - Increase alpha, beta, gamma (say to 0.01 and thereafter 0.1) and use LBFGS for the remainder of the training.
+ - Always keep an eye for the k-harmonic loss exploding (as shown in the figure above). Control this by tuning alpha.
 
 
 <img src="./figures/examplepatch.png" alt="Example input/output" width="300"/>
