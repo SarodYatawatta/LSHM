@@ -209,11 +209,25 @@ for epoch in range(num_epochs):
         freal,fimag=torch_fftshift(fftx.real,fftx.imag)
         y=torch.cat((freal,fimag),1)
         yhat,ymu=fnet(y)
-        Mu=torch.cat((mu,ymu),1)
+        if time_freq_cnn:
+          yhatc=torch.complex(yhat[:,0:4],yhat[:,4:8])
+          yc=torch.complex(freal,fimag)
+          yerror=torch.fft.ifftshift(yc-yhatc,dim=(2,3))
+          iffty=torch.fft.ifftn(yerror,dim=(2,3),norm='ortho') # scale 1/sqrt(patch_size^2)
+          iy=torch.real(iffty)
+          iy1=torch.flatten(iy,start_dim=2,end_dim=3)
+          iy2=torch.flatten(torch.transpose(iy,2,3),start_dim=2,end_dim=3)
+          yyT,yyTmu=netT(iy1)
+          yyF,yyFmu=netF(iy2)
+          Mu=torch.cat((mu,ymu,yyTmu,yyFmu),1)
+        else:
+          Mu=torch.cat((mu,ymu),1)
         err1=(mod.clustering_error(Mu).data.item())
         mod.offline_update(Mu)
         err2=(mod.clustering_error(Mu).data.item())
         print('%e %e'%(err1,err2))
+        if time_freq_cnn:
+           del yhatc,yc,yerror,iffty,iy,iy1,iy2,yyT,yyF,yyTmu,yyFmu
         del xhat,mu,fftx,y,yhat,ymu,Mu
 
     #update()
