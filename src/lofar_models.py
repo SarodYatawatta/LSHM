@@ -530,12 +530,12 @@ class AutoEncoder1DCNN(nn.Module):
 
         self.fc3=nn.Linear(self.latent_dim,768)
         # output_padding is added to match the input sizes
-        self.tconv0=nn.ConvTranspose1d(192,96,4,stride=4,padding=1,output_padding=2)
-        self.tconv1=nn.ConvTranspose1d(96,48,4,stride=4,padding=1,output_padding=2)
-        self.tconv2=nn.ConvTranspose1d(48,24,4,stride=4,padding=1,output_padding=2)
-        self.tconv3=nn.ConvTranspose1d(24,12,4,stride=4,padding=1,output_padding=2)
-        self.tconv4=nn.ConvTranspose1d(12,8,4,stride=4,padding=1,output_padding=2)
-        self.tconv5=nn.ConvTranspose1d(8,channels,4,stride=4,padding=1,output_padding=2)
+        self.tconv0=nn.ConvTranspose1d(192,96,4,stride=4,padding=0,output_padding=0)
+        self.tconv1=nn.ConvTranspose1d(96,48,4,stride=4,padding=0,output_padding=0)
+        self.tconv2=nn.ConvTranspose1d(48,24,4,stride=4,padding=0,output_padding=0)
+        self.tconv3=nn.ConvTranspose1d(24,12,4,stride=4,padding=0,output_padding=0)
+        self.tconv4=nn.ConvTranspose1d(12,8,4,stride=4,padding=0,output_padding=0)
+        self.tconv5=nn.ConvTranspose1d(8,channels,4,stride=4,padding=0,output_padding=0)
 
     def forward(self, x):
         mu=self.encode(x)
