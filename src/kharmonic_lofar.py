@@ -62,8 +62,8 @@ net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels).to(mydevice)
 fnet=AutoEncoderCNN2(latent_dim=Lf,channels=2*num_in_channels).to(mydevice)
 if time_freq_cnn:
   # 1D autoencoders
-  netT=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
-  netF=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
+  netT=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels).to(mydevice)
+  netF=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels).to(mydevice)
   mod=Kmeans(latent_dim=(L+Lf+Lt+Lt),K=Kc,p=Khp).to(mydevice)
 else:
   mod=Kmeans(latent_dim=(L+Lf),K=Kc,p=Khp).to(mydevice)
