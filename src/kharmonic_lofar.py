@@ -25,7 +25,7 @@ default_batch=30 # no. of baselines per iter, batch size determined by how many 
 num_epochs=40 # total epochs
 Niter=40 # how many minibatches are considered for an epoch
 save_model=True
-load_model=True
+load_model=False
 # enable this to use 1D CNN along time/freq axes
 time_freq_cnn=True
 # to use random affine transforms to augment original data
@@ -87,13 +87,16 @@ if load_model:
     netF.train()
 
 
-
-params=list(net.parameters())
+# start with empty parameter list
+params=list()
+# training strategy: first, first two autoencoders; next, last two autoencoders
+# finally, kharmoic model
+params.extend(list(net.parameters()))
 params.extend(list(fnet.parameters()))
-params.extend(list(mod.parameters()))
-if time_freq_cnn:
-  params.extend(list(netT.parameters()))
-  params.extend(list(netF.parameters()))
+#params.extend(list(mod.parameters()))
+#if time_freq_cnn:
+#  params.extend(list(netT.parameters()))
+#  params.extend(list(netF.parameters()))
 
 
 import torch.optim as optim

@@ -69,6 +69,9 @@ if time_freq_cnn:
   net1D2.eval()
 
 torchvision.utils.save_image(mod.M.data,'M.png')
+mydict={'M':mod.M.data.numpy()}
+from scipy.io import savemat
+savemat('M.mat',mydict)
 file_list=['/home/sarod/L798736.MS_extract.h5', '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L703385.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5']
 sap_list=['0', '0', '1', '1', '2', '1', '2', '0', '1', '2', '0', '1', '2', '1', '2', '1', '2', '1', '2', '1', '2', '0', '1', '2', '1', '2']
 
@@ -93,22 +96,23 @@ for nb in range(nbase):
  # clamp high values data
  y.clamp_(min=-10,max=10)
  yhat,ymu=fnet(y)
- # form complex tensors
- yhatc=torch.complex(yhat[:,0:4],yhat[:,4:8])
- yc=torch.complex(freal,fimag)
- yerror=torch.fft.ifftshift(yc-yhatc,dim=(2,3))
- # get ifft
- iffty=torch.fft.ifftn(yerror,dim=(2,3),norm='ortho') # scale 1/sqrt(patch_size^2)
- # get real part only
- iy=torch.real(iffty)
- # vectorize 
- iy1=torch.flatten(iy,start_dim=2,end_dim=3)
- iy2=torch.flatten(torch.transpose(iy,2,3),start_dim=2,end_dim=3)
- yy1,yy1mu=net1D1(iy1)
- yy2,yy2mu=net1D2(iy2)
- yy12d=torch.reshape(yy1,(-1,4,128,128))
- yy22d=torch.reshape(yy2,(-1,4,128,128))
- yy22d=torch.transpose(yy22d,2,3)
+ if time_freq_cnn:
+   # form complex tensors
+   yhatc=torch.complex(yhat[:,0:4],yhat[:,4:8])
+   yc=torch.complex(freal,fimag)
+   yerror=torch.fft.ifftshift(yc-yhatc,dim=(2,3))
+   # get ifft
+   iffty=torch.fft.ifftn(yerror,dim=(2,3),norm='ortho') # scale 1/sqrt(patch_size^2)
+   # get real part only
+   iy=torch.real(iffty)
+   # vectorize
+   iy1=torch.flatten(iy,start_dim=2,end_dim=3)
+   iy2=torch.flatten(torch.transpose(iy,2,3),start_dim=2,end_dim=3)
+   yy1,yy1mu=net1D1(iy1)
+   yy2,yy2mu=net1D2(iy2)
+   yy12d=torch.reshape(yy1,(-1,4,128,128))
+   yy22d=torch.reshape(yy2,(-1,4,128,128))
+   yy22d=torch.transpose(yy22d,2,3)
  if not colour_output:
   torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),(patch_size*patch_size)*torch.cat((y[0,1],yhat[0,1])),
    torch.cat((torch.real(iffty[0,1]),torch.imag(iffty[0,1]))),torch.cat((yy12d[0,1],yy22d[0,1]))
@@ -118,16 +122,20 @@ for nb in range(nbase):
   xhat0=channel_to_rgb(xhat[0])
   y0=channel_to_rgb(y[0,0:4])
   yhat0=channel_to_rgb(yhat[0,0:4])
-  y1real=channel_to_rgb(torch.real(iffty[0,0:4]))
-  y1imag=channel_to_rgb(torch.imag(iffty[0,0:4]))
-  y1D1=channel_to_rgb(yy12d[0,0:4])
-  y1D2=channel_to_rgb(yy22d[0,0:4])
-  print("norm x=%f xhat=%f y=%f yhat=%f y1real=%f y1imag=%f"%(torch.linalg.norm(x0),
-   torch.linalg.norm(xhat0),torch.linalg.norm(y0),torch.linalg.norm(yhat0),
-   torch.linalg.norm(y1real),torch.linalg.norm(y1imag)))
-  torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),torch.cat((y0,yhat0),1),
-   torch.cat((y1real,y1imag),1),  torch.cat((y1D1,y1D2),1)),
-   2).data, 'xx_'+str(nb)+'.png' )
+  if time_freq_cnn:
+    y1real=channel_to_rgb(torch.real(iffty[0,0:4]))
+    y1imag=channel_to_rgb(torch.imag(iffty[0,0:4]))
+    y1D1=channel_to_rgb(yy12d[0,0:4])
+    y1D2=channel_to_rgb(yy22d[0,0:4])
+    print("norm x=%f xhat=%f y=%f yhat=%f y1real=%f y1imag=%f"%(torch.linalg.norm(x0),
+     torch.linalg.norm(xhat0),torch.linalg.norm(y0),torch.linalg.norm(yhat0),
+     torch.linalg.norm(y1real),torch.linalg.norm(y1imag)))
+    torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),torch.cat((y0,yhat0),1),
+     torch.cat((y1real,y1imag),1),  torch.cat((y1D1,y1D2),1)),
+     2).data, 'xx_'+str(nb)+'.png' )
+  else:
+    torchvision.utils.save_image(torch.cat((torch.cat((x0,xhat0),1),torch.cat((y0,yhat0),1)),
+     2).data, 'xx_'+str(nb)+'.png' )
  if time_freq_cnn:
    Mu=torch.cat((mu,ymu,yy1mu,yy2mu),1)
  else:
@@ -137,7 +145,7 @@ for nb in range(nbase):
  dist=torch.zeros(Kc)
  for ck in range(Kc):
    for cn in range(nbatch):
-     dist[ck]=dist[ck]+(torch.norm(Mu[cn,:]-mod.M[ck,:],2))
+     dist[ck]=dist[ck]+torch.sum(torch.pow(Mu[cn,:]-mod.M[ck,:],Khp))
  dist=dist/nbatch
  X[:,nb]=dist.detach().numpy()
  (values,indices)=torch.min(dist.view(Kc,1),0)
@@ -151,7 +159,7 @@ for nb in range(nbase):
 tsne=TSNE(n_components=2,random_state=99,verbose=True)
 X_emb=tsne.fit_transform(X.transpose())
 uniq=np.unique(clusid)
-snsplot=sns.scatterplot(X_emb[:,0], X_emb[:,1], hue=clusid, legend='full', 
+snsplot=sns.scatterplot(x=X_emb[:,0], y=X_emb[:,1], hue=clusid, legend='full',
   palette = sns.color_palette("bright", n_colors=len(uniq)))
 snsplot.figure.savefig('scatter.png')
 
