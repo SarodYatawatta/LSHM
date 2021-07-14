@@ -26,6 +26,7 @@ Sometimes Adam will diverge (see figure above), and LBFGS will give a more stabl
  - Set alpha=beta=gamma=0.001 (a low value), use Adam for training the autoencoders, a few epochs.
  - Increase alpha, beta, gamma (say to 0.01 and thereafter 0.1) and use LBFGS for the remainder of the training.
  - Always keep an eye for the k-harmonic loss exploding (as shown in the figure above). Control this by tuning alpha.
+ - Important: divide the training into three: i) 2D CNN, ii) 1D CNN and iii) K Harmonic model, and iteratively update parameters of each of these models. This will give a stable result.
 
 
 <img src="./figures/examplepatch.png" alt="Example input/output" width="300"/>
