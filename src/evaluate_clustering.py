@@ -16,14 +16,10 @@ from sklearn.preprocessing import StandardScaler
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
 L=256 # latent dimension
-Lf=64 # latent dimension in Fourier space
 Lt=32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 Ko=10 # final hard clusters
-# enable this to use 1D CNN along time/freq axes
-time_freq_cnn=True
-
 
 patch_size=128
 
@@ -33,40 +29,27 @@ colour_output=True
 from lofar_models import *
 
 num_in_channels=4 # real,imag XX,YY
-# 32x32 patches
-#net=AutoEncoderCNN(latent_dim=L,K=Kc,channels=8)
-# 64x64 patches
-#net=AutoEncoderCNN1(latent_dim=L,K=Kc,channels=8)
 # for 128x128 patches
 net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels)
-# fft: real,imag, so increase number of channels
-fnet=AutoEncoderCNN2(latent_dim=Lf,channels=2*num_in_channels)
 
 # 1D autoencoders
-if time_freq_cnn:
-  net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
-  net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
-  mod=Kmeans(latent_dim=(L+Lf+Lt+Lt),p=Khp)
-else:
-  mod=Kmeans(latent_dim=(L+Lf),p=Khp)
+net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
+net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
+mod=Kmeans(latent_dim=(L+Lt+Lt),p=Khp)
 
 checkpoint=torch.load('./net.model',map_location=torch.device('cpu'))
 net.load_state_dict(checkpoint['model_state_dict'])
-checkpoint=torch.load('./fnet.model',map_location=torch.device('cpu'))
-fnet.load_state_dict(checkpoint['model_state_dict'])
 checkpoint=torch.load('./khm.model',map_location=torch.device('cpu'))
 mod.load_state_dict(checkpoint['model_state_dict'])
 net.eval()
-fnet.eval()
 mod.eval()
 
-if time_freq_cnn:
-  checkpoint=torch.load('./netT.model',map_location=mydevice)
-  net1D1.load_state_dict(checkpoint['model_state_dict'])
-  checkpoint=torch.load('./netF.model',map_location=mydevice)
-  net1D2.load_state_dict(checkpoint['model_state_dict'])
-  net1D1.eval()
-  net1D2.eval()
+checkpoint=torch.load('./netT.model',map_location=mydevice)
+net1D1.load_state_dict(checkpoint['model_state_dict'])
+checkpoint=torch.load('./netF.model',map_location=mydevice)
+net1D2.load_state_dict(checkpoint['model_state_dict'])
+net1D1.eval()
+net1D2.eval()
 
 torchvision.utils.save_image(mod.M.data,'M.png')
 mydict={'M':mod.M.data.numpy()}
@@ -88,58 +71,29 @@ for nb in range(nbase):
  patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
  # get latent variable
  xhat,mu=net(x)
- # perform 2D fft
- fftx=torch.fft.fftn(x-xhat,dim=(2,3),norm='ortho') # scale 1/sqrt(patch_size^2)
- # fftshift
- freal,fimag=torch_fftshift(fftx.real,fftx.imag)
- y=torch.cat((freal,fimag),1)
- # clamp high values data
- y.clamp_(min=-10,max=10)
- yhat,ymu=fnet(y)
- if time_freq_cnn:
-   # form complex tensors
-   yhatc=torch.complex(yhat[:,0:4],yhat[:,4:8])
-   yc=torch.complex(freal,fimag)
-   yerror=torch.fft.ifftshift(yc-yhatc,dim=(2,3))
-   # get ifft
-   iffty=torch.fft.ifftn(yerror,dim=(2,3),norm='ortho') # scale 1/sqrt(patch_size^2)
-   # get real part only
-   iy=torch.real(iffty)
-   # vectorize
-   iy1=torch.flatten(iy,start_dim=2,end_dim=3)
-   iy2=torch.flatten(torch.transpose(iy,2,3),start_dim=2,end_dim=3)
-   yy1,yy1mu=net1D1(iy1)
-   yy2,yy2mu=net1D2(iy2)
-   yy12d=torch.reshape(yy1,(-1,4,128,128))
-   yy22d=torch.reshape(yy2,(-1,4,128,128))
-   yy22d=torch.transpose(yy22d,2,3)
+ # vectorize
+ iy1=torch.flatten(x,start_dim=2,end_dim=3)
+ iy2=torch.flatten(torch.transpose(x,2,3),start_dim=2,end_dim=3)
+ yy1,yy1mu=net1D1(iy1)
+ yy2,yy2mu=net1D2(iy2)
+ yy12d=torch.reshape(yy1,(-1,4,128,128))
+ yy22d=torch.reshape(yy2,(-1,4,128,128))
+ yy22d=torch.transpose(yy22d,2,3)
  if not colour_output:
-  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),(patch_size*patch_size)*torch.cat((y[0,1],yhat[0,1])),
-   torch.cat((torch.real(iffty[0,1]),torch.imag(iffty[0,1]))),torch.cat((yy12d[0,1],yy22d[0,1]))
+  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),
+   torch.cat((yy12d[0,1],yy22d[0,1]))
    ),1).data, 'xx_'+str(nb)+'.png' )
  else:
   x0=channel_to_rgb(x[0])
   xhat0=channel_to_rgb(xhat[0])
-  y0=channel_to_rgb(y[0,0:4])
-  yhat0=channel_to_rgb(yhat[0,0:4])
-  if time_freq_cnn:
-    y1real=channel_to_rgb(torch.real(iffty[0,0:4]))
-    y1imag=channel_to_rgb(torch.imag(iffty[0,0:4]))
-    y1D1=channel_to_rgb(yy12d[0,0:4])
-    y1D2=channel_to_rgb(yy22d[0,0:4])
-    print("norm x=%f xhat=%f y=%f yhat=%f y1real=%f y1imag=%f"%(torch.linalg.norm(x0),
-     torch.linalg.norm(xhat0),torch.linalg.norm(y0),torch.linalg.norm(yhat0),
-     torch.linalg.norm(y1real),torch.linalg.norm(y1imag)))
-    torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),torch.cat((y0,yhat0),1),
-     torch.cat((y1real,y1imag),1),  torch.cat((y1D1,y1D2),1)),
+  y1D1=channel_to_rgb(yy12d[0,0:4])
+  y1D2=channel_to_rgb(yy22d[0,0:4])
+  print("norm x=%f xhat=%f"%(torch.linalg.norm(x0),
+     torch.linalg.norm(xhat0)))
+  torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),
+     torch.cat((y1D1,y1D2),1)),
      2).data, 'xx_'+str(nb)+'.png' )
-  else:
-    torchvision.utils.save_image(torch.cat((torch.cat((x0,xhat0),1),torch.cat((y0,yhat0),1)),
-     2).data, 'xx_'+str(nb)+'.png' )
- if time_freq_cnn:
-   Mu=torch.cat((mu,ymu,yy1mu,yy2mu),1)
- else:
-   Mu=torch.cat((mu,ymu),1)
+ Mu=torch.cat((mu,yy1mu,yy2mu),1)
  kdist=mod(Mu)
  (nbatch,_)=Mu.shape
  dist=torch.zeros(Kc)

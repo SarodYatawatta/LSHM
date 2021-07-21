@@ -574,6 +574,7 @@ class Kmeans(nn.Module):
      self.latent_dim=latent_dim
      self.K=K
      self.p=p # K harmonic mean order 1/|| ||^p
+     self.EPS=1e-9# epsilon to avoid 1/0 cases
      # cluster centroids
      self.M=torch.nn.Parameter(torch.rand(self.K,self.latent_dim),requires_grad=True)
 
@@ -585,8 +586,8 @@ class Kmeans(nn.Module):
        # calculate harmonic mean for x := K/ sum_k (1/||x-m_k||^p)
        ek=0
        for ck in range(self.K):
-         ek=ek+1.0/(torch.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+1e-12)
-       loss=loss+self.K/(ek+1e-12)
+         ek=ek+1.0/(torch.linalg.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+self.EPS)
+       loss=loss+self.K/(ek+self.EPS)
      return loss/(nbatch*self.K*self.latent_dim)
 
   def clustering_error(self,X):
@@ -599,14 +600,14 @@ class Kmeans(nn.Module):
      loss=0
      # take outer product between each rows
      for ci in range(self.K):
-       mnrm=torch.norm(self.M[ci,:],2)
+       mnrm=torch.linalg.norm(self.M[ci,:],2)
        # denominator is actually=1
-       denominator=torch.exp(torch.dot(self.M[ci,:],self.M[ci,:])/(mnrm*mnrm+1e-12))
+       denominator=torch.exp(torch.dot(self.M[ci,:],self.M[ci,:])/(mnrm*mnrm+self.EPS))
        numerator=0
        for cj in range(self.K):
         if cj!=ci:
-          numerator=numerator+torch.exp(torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.norm(self.M[cj,:],2)+1e-12))
-       loss=loss+(numerator/(denominator+1e-12))
+          numerator=numerator+torch.exp(torch.dot(self.M[ci,:],self.M[cj,:])/(mnrm*torch.linalg.norm(self.M[cj,:],2)+self.EPS))
+       loss=loss+(numerator/(denominator+self.EPS))
      return loss/(self.K*self.latent_dim)
 
   def offline_update(self,X):
@@ -622,11 +623,11 @@ class Kmeans(nn.Module):
         # alpha_i := 1/ (sum_k (1/||x_i-m_k||^p))^2
         ek=0
         for ck in range(self.K):
-          ek=ek+1.0/(torch.norm(self.M[ck,:]-X[ci,:],2)**(self.p)+1e-12)
-        alpha[ci]=1.0/(ek**2+1e-12)
+          ek=ek+1.0/(torch.linalg.norm(self.M[ck,:]-X[ci,:],2)**(self.p)+self.EPS)
+        alpha[ci]=1.0/(ek**2+self.EPS)
         # Q_ij = alpha_i/ ||x_i-m_j||^(p+2)
         for ck in range(self.K):
-          Q[ci,ck]=alpha[ci]/(torch.norm(self.M[ck,:]-X[ci,:],2)**(self.p+2)+1e-12)
+          Q[ci,ck]=alpha[ci]/(torch.linlag.norm(self.M[ck,:]-X[ci,:],2)**(self.p+2)+self.EPS)
       # q_j = sum_i Q_ij
       for ck in range(self.K):
           q[ck]=torch.sum(Q[:,ck])
