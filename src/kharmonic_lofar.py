@@ -22,8 +22,9 @@ else:
 
 #torch.manual_seed(69)
 default_batch=30 # no. of baselines per iter, batch size determined by how many patches are created
-num_epochs=1 # total epochs
+num_epochs=5 # total epochs
 Niter=40 # how many minibatches are considered for an epoch
+Nadmm=4 # Inner optimization iterations (ADMM)
 save_model=True
 load_model=True
 
@@ -35,10 +36,11 @@ file_list,sap_list=get_fileSAP('/home/sarod')
 L=256 # latent dimension in real space
 Lt=32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # clusters
-Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=0.1 # loss+alpha*cluster_loss
-beta=0.1 # loss+beta*cluster_similarity (penalty)
-gamma=0.1 # loss+gamma*augmentation_loss
+Khp=2.5 # order of K harmonic mean 1/|| ||^p norm
+alpha=0.001 # loss+alpha*cluster_loss
+beta=0.001 # loss+beta*cluster_similarity (penalty)
+gamma=0.001 # loss+gamma*augmentation_loss
+rho=1 # ADMM rho
 
 # patch size of images
 patch_size=128
@@ -71,11 +73,15 @@ if load_model:
 import torch.optim as optim
 from lbfgsnew import LBFGSNew # custom optimizer
 criterion=nn.MSELoss(reduction='sum')
-optimizer=optim.Adam(net.parameters(), lr=0.0001)
-optimizerT=optim.Adam(netT.parameters(), lr=0.0001)
-optimizerF=optim.Adam(netF.parameters(), lr=0.0001)
-#optimizerM=optim.Adam(mod.parameters(), lr=0.0001)
-optimizerM = LBFGSNew(mod.parameters(), history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
+# start with empty parameter list
+params=list()
+params.extend(list(net.parameters()))
+params.extend(list(netT.parameters()))
+params.extend(list(netF.parameters()))
+params.extend(list(mod.parameters()))
+
+optimizer=optim.Adam(params, lr=0.001)
+#optimizerM = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
 ############################################################
 # Augmented loss function
@@ -108,40 +114,72 @@ for epoch in range(num_epochs):
     # i.e., one baseline (per polarization, real,imag) will create patchx x patchy batches
     batch_per_bline=patchx*patchy
 
-    def closure():
+    # Lagrange multipliers
+    y1=torch.zeros(x.numel(),requires_grad=False).to(mydevice)
+    y2=torch.zeros(x.numel(),requires_grad=False).to(mydevice)
+    y3=torch.zeros(x.numel(),requires_grad=False).to(mydevice)
+    for admm in range(Nadmm):
+      def closure():
         if torch.is_grad_enabled():
          optimizer.zero_grad()
-        xhat,mu=net(x)
+        x1,mu=net(x)
+        # residual
+        x11=(x-x1)/2
         # pass through 1D CNN
-        iy1=torch.flatten(x,start_dim=2,end_dim=3)
-        iy2=torch.flatten(torch.transpose(x,2,3),start_dim=2,end_dim=3)
+        iy1=torch.flatten(x11,start_dim=2,end_dim=3)
         yyT,yyTmu=netT(iy1)
-        yyF,yyFmu=netF(iy2)
- 
         # reshape 1D outputs 
-        yyT=yyT.view_as(xhat)
-        yyF=yyF.view_as(xhat)
-        # reconstruction
-        xrecon=xhat+yyT+yyF
+        x2=yyT.view_as(x11)
+
+        iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
+        yyF,yyFmu=netF(iy2)
+        # reshape 1D outputs 
+        x3=torch.transpose(yyF.view_as(x11),2,3)
+
+        # full reconstruction
+        xrecon=x1+x2+x3
+ 
         # normalize all losses by number of dimensions of the tensor input
-        loss1=(criterion(xrecon,x))/(x.numel())
+        # total reconstruction loss
+        loss0=(criterion(xrecon,x))/(x.numel())
+        # individual losses for each AE
+        loss1=(torch.dot(y1,(x-x1).view(-1))+rho/2*criterion(x,x1))/(x.numel())
+        loss2=(torch.dot(y2,(x11-x2).view(-1))+rho/2*criterion(x11,x2))/(x.numel())
+        loss3=(torch.dot(y3,(x11-x3).view(-1))+rho/2*criterion(x11,x3))/(x.numel())
         Mu=torch.cat((mu,yyTmu,yyFmu),1)
 
         kdist=alpha*mod.clustering_error(Mu)
         clus_sim=beta*mod.cluster_similarity()
         augmentation_loss=gamma*augmented_loss(Mu,batch_per_bline,default_batch)
-        loss=loss1+kdist+augmentation_loss+clus_sim
+        loss=loss0+loss1+loss2+loss3+kdist+augmentation_loss+clus_sim
 
         if loss.requires_grad:
           loss.backward(retain_graph=True)
-          print('%d %d %f %f %f %f'%(epoch,i,loss1.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
+          # output line contains:
+          # epoch batch total_loss loss_AE1 loss_AE2 loss_AE3 loss_KHarmonic loss_augmentation loss_similarity
+          print('%d %d %f %f %f %f %f %f %f'%(epoch,i,loss0.data.item(),loss1.data.item(),loss2.data.item(),loss3.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
         return loss
 
-    #update parameters
-    optimizer.step(closure)
-    optimizerT.step(closure)
-    optimizerF.step(closure)
-    optimizerM.step(closure)
+      #update parameters
+      optimizer.step(closure)
+      # update Lagrange multipliers
+      with torch.no_grad():
+        x1,_=net(x)
+        x11=(x-x1)/2
+        iy1=torch.flatten(x11,start_dim=2,end_dim=3)
+        yyT,_=netT(iy1)
+        # reshape 1D outputs 
+        x2=yyT.view_as(x11)
+
+        iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
+        yyF,_=netF(iy2)
+        # reshape 1D outputs 
+        x3=torch.transpose(yyF.view_as(x11),2,3)
+
+        y1=y1+rho*(x-x1).view(-1)
+        y2=y2+rho*(x11-x2).view(-1)
+        y3=y3+rho*(x11-x3).view(-1)
+        print("%d %f %f %f"%(admm,torch.norm(y1),torch.norm(y2),torch.norm(y3)))
 
 if save_model:
   torch.save({

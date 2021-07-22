@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 L=256 # latent dimension
 Lt=32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # K-harmonic clusters
-Khp=4 # order of K harmonic mean 1/|| ||^p norm
+Khp=2.5 # order of K harmonic mean 1/|| ||^p norm
 Ko=10 # final hard clusters
 
 patch_size=128
@@ -70,28 +70,32 @@ clusid=np.zeros(nbase,dtype=np.float64)
 for nb in range(nbase):
  patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
  # get latent variable
- xhat,mu=net(x)
+ x1,mu=net(x)
+ x11=(x-x1)/2
  # vectorize
- iy1=torch.flatten(x,start_dim=2,end_dim=3)
- iy2=torch.flatten(torch.transpose(x,2,3),start_dim=2,end_dim=3)
+ iy1=torch.flatten(x11,start_dim=2,end_dim=3)
+ iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
  yy1,yy1mu=net1D1(iy1)
  yy2,yy2mu=net1D2(iy2)
- yy12d=torch.reshape(yy1,(-1,4,128,128))
- yy22d=torch.reshape(yy2,(-1,4,128,128))
- yy22d=torch.transpose(yy22d,2,3)
+ x2=yy1.view_as(x)
+ x3=torch.transpose(yy2.view_as(x),2,3)
+ # reconstruction
+ xrecon=x1+x2+x3
  if not colour_output:
-  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],xhat[0,1])),
-   torch.cat((yy12d[0,1],yy22d[0,1]))
+  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],x1[0,1])),
+   torch.cat((x2[0,1],x3[0,1]))
    ),1).data, 'xx_'+str(nb)+'.png' )
  else:
   x0=channel_to_rgb(x[0])
-  xhat0=channel_to_rgb(xhat[0])
-  y1D1=channel_to_rgb(yy12d[0,0:4])
-  y1D2=channel_to_rgb(yy22d[0,0:4])
+  xhat0=channel_to_rgb(x1[0])
+  y1D1=channel_to_rgb(x2[0,0:4])
+  y1D2=channel_to_rgb(x3[0,0:4])
+  xrec=channel_to_rgb(xrecon[0,0:4])
+  xerr=channel_to_rgb(x[0,0:4]-xrecon[0,0:4])
   print("norm x=%f xhat=%f"%(torch.linalg.norm(x0),
      torch.linalg.norm(xhat0)))
   torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),
-     torch.cat((y1D1,y1D2),1)),
+     torch.cat((y1D1,y1D2),1),torch.cat((xrec,xerr),1)),
      2).data, 'xx_'+str(nb)+'.png' )
  Mu=torch.cat((mu,yy1mu,yy2mu),1)
  kdist=mod(Mu)
