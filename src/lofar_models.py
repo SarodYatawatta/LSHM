@@ -136,7 +136,7 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
 
   # do some rough cleanup of data
   ##y[y!=y]=0 # set NaN,Inf to zero
-  y.clamp_(-1e6,1e6) # clip high values
+  y.clamp_(-1e3,1e3) # clip high values
 
   # normalize data
   if normalize_data:

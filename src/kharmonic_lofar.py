@@ -21,25 +21,25 @@ else:
   mydevice=torch.device('cpu')
 
 #torch.manual_seed(69)
-default_batch=30 # no. of baselines per iter, batch size determined by how many patches are created
-num_epochs=5 # total epochs
+default_batch=12 # no. of baselines per iter, batch size determined by how many patches are created
+num_epochs=10 # total epochs
 Niter=40 # how many minibatches are considered for an epoch
-Nadmm=4 # Inner optimization iterations (ADMM)
+Nadmm=10 # Inner optimization iterations (ADMM)
 save_model=True
 load_model=True
 
 # scan directory to get valid datasets
 # file names have to match the SAP ids in the sap_list
-file_list,sap_list=get_fileSAP('/home/sarod')
+file_list,sap_list=get_fileSAP('/media/sarod')
 # or ../../drive/My Drive/Colab Notebooks/
 
 L=256 # latent dimension in real space
 Lt=32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # clusters
 Khp=2.5 # order of K harmonic mean 1/|| ||^p norm
-alpha=0.001 # loss+alpha*cluster_loss
-beta=0.001 # loss+beta*cluster_similarity (penalty)
-gamma=0.001 # loss+gamma*augmentation_loss
+alpha=0.1 # loss+alpha*cluster_loss
+beta=0.1 # loss+beta*cluster_similarity (penalty)
+gamma=0.1 # loss+gamma*augmentation_loss
 rho=1 # ADMM rho
 
 # patch size of images
@@ -80,8 +80,8 @@ params.extend(list(netT.parameters()))
 params.extend(list(netF.parameters()))
 params.extend(list(mod.parameters()))
 
-optimizer=optim.Adam(params, lr=0.001)
-#optimizerM = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
+#optimizer=optim.Adam(params, lr=0.001)
+optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
 ############################################################
 # Augmented loss function
@@ -156,8 +156,8 @@ for epoch in range(num_epochs):
         if loss.requires_grad:
           loss.backward(retain_graph=True)
           # output line contains:
-          # epoch batch total_loss loss_AE1 loss_AE2 loss_AE3 loss_KHarmonic loss_augmentation loss_similarity
-          print('%d %d %f %f %f %f %f %f %f'%(epoch,i,loss0.data.item(),loss1.data.item(),loss2.data.item(),loss3.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
+          # epoch batch admm total_loss loss_AE1 loss_AE2 loss_AE3 loss_KHarmonic loss_augmentation loss_similarity
+          print('%d %d %d %f %f %f %f %f %f %f'%(epoch,i,admm,loss0.data.item(),loss1.data.item(),loss2.data.item(),loss3.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
         return loss
 
       #update parameters
@@ -179,7 +179,7 @@ for epoch in range(num_epochs):
         y1=y1+rho*(x-x1).view(-1)
         y2=y2+rho*(x11-x2).view(-1)
         y3=y3+rho*(x11-x3).view(-1)
-        print("%d %f %f %f"%(admm,torch.norm(y1),torch.norm(y2),torch.norm(y3)))
+        #print("%d %f %f %f"%(admm,torch.norm(y1),torch.norm(y2),torch.norm(y3)))
 
 if save_model:
   torch.save({

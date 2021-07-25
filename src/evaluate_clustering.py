@@ -44,9 +44,9 @@ mod.load_state_dict(checkpoint['model_state_dict'])
 net.eval()
 mod.eval()
 
-checkpoint=torch.load('./netT.model',map_location=mydevice)
+checkpoint=torch.load('./netT.model',map_location=torch.device('cpu'))
 net1D1.load_state_dict(checkpoint['model_state_dict'])
-checkpoint=torch.load('./netF.model',map_location=mydevice)
+checkpoint=torch.load('./netF.model',map_location=torch.device('cpu'))
 net1D2.load_state_dict(checkpoint['model_state_dict'])
 net1D1.eval()
 net1D2.eval()
@@ -69,6 +69,7 @@ clusid=np.zeros(nbase,dtype=np.float64)
 # iterate over each baselines
 for nb in range(nbase):
  patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
+ x=x.cpu() # send to cpu
  # get latent variable
  x1,mu=net(x)
  x11=(x-x1)/2
