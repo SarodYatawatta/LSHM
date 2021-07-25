@@ -586,7 +586,7 @@ class Kmeans(nn.Module):
        # calculate harmonic mean for x := K/ sum_k (1/||x-m_k||^p)
        ek=0
        for ck in range(self.K):
-         ek=ek+1.0/(torch.linalg.norm(self.M[ck,:]-X[nb,:],2)**(self.p)+self.EPS)
+         ek=ek+1.0/(torch.pow(torch.linalg.norm(self.M[ck,:]-X[nb,:],2),self.p)+self.EPS)
        loss=loss+self.K/(ek+self.EPS)
      return loss/(nbatch*self.K*self.latent_dim)
 
@@ -623,11 +623,11 @@ class Kmeans(nn.Module):
         # alpha_i := 1/ (sum_k (1/||x_i-m_k||^p))^2
         ek=0
         for ck in range(self.K):
-          ek=ek+1.0/(torch.linalg.norm(self.M[ck,:]-X[ci,:],2)**(self.p)+self.EPS)
+          ek=ek+1.0/(torch.pow(torch.linalg.norm(self.M[ck,:]-X[ci,:],2),self.p)+self.EPS)
         alpha[ci]=1.0/(ek**2+self.EPS)
         # Q_ij = alpha_i/ ||x_i-m_j||^(p+2)
         for ck in range(self.K):
-          Q[ci,ck]=alpha[ci]/(torch.linlag.norm(self.M[ck,:]-X[ci,:],2)**(self.p+2)+self.EPS)
+          Q[ci,ck]=alpha[ci]/(torch.pow(torch.linlag.norm(self.M[ck,:]-X[ci,:],2),self.p+2)+self.EPS)
       # q_j = sum_i Q_ij
       for ck in range(self.K):
           q[ck]=torch.sum(Q[:,ck])

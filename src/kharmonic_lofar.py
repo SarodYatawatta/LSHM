@@ -36,10 +36,10 @@ file_list,sap_list=get_fileSAP('/media/sarod')
 L=256 # latent dimension in real space
 Lt=32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # clusters
-Khp=2.5 # order of K harmonic mean 1/|| ||^p norm
-alpha=0.1 # loss+alpha*cluster_loss
-beta=0.1 # loss+beta*cluster_similarity (penalty)
-gamma=0.1 # loss+gamma*augmentation_loss
+Khp=4 # order of K harmonic mean 1/|| ||^p norm
+alpha=1.0 # loss+alpha*cluster_loss
+beta=1.0 # loss+beta*cluster_similarity (penalty)
+gamma=1.0 # loss+gamma*augmentation_loss
 rho=1 # ADMM rho
 
 # patch size of images
@@ -75,9 +75,9 @@ from lbfgsnew import LBFGSNew # custom optimizer
 criterion=nn.MSELoss(reduction='sum')
 # start with empty parameter list
 params=list()
-params.extend(list(net.parameters()))
-params.extend(list(netT.parameters()))
-params.extend(list(netF.parameters()))
+#params.extend(list(net.parameters()))
+#params.extend(list(netT.parameters()))
+#params.extend(list(netF.parameters()))
 params.extend(list(mod.parameters()))
 
 #optimizer=optim.Adam(params, lr=0.001)
