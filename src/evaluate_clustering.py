@@ -67,52 +67,57 @@ X=np.zeros([Kc,nbase],dtype=np.float64)
 clusid=np.zeros(nbase,dtype=np.float64)
 
 # iterate over each baselines
-for nb in range(nbase):
- patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
- x=x.cpu() # send to cpu
- # get latent variable
- x1,mu=net(x)
- x11=(x-x1)/2
- # vectorize
- iy1=torch.flatten(x11,start_dim=2,end_dim=3)
- iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
- yy1,yy1mu=net1D1(iy1)
- yy2,yy2mu=net1D2(iy2)
- x2=yy1.view_as(x)
- x3=torch.transpose(yy2.view_as(x),2,3)
- # reconstruction
- xrecon=x1+x2+x3
- if not colour_output:
-  torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],x1[0,1])),
-   torch.cat((x2[0,1],x3[0,1]))
-   ),1).data, 'xx_'+str(nb)+'.png' )
- else:
-  x0=channel_to_rgb(x[0])
-  xhat0=channel_to_rgb(x1[0])
-  y1D1=channel_to_rgb(x2[0,0:4])
-  y1D2=channel_to_rgb(x3[0,0:4])
-  xrec=channel_to_rgb(xrecon[0,0:4])
-  xerr=channel_to_rgb(x[0,0:4]-xrecon[0,0:4])
-  print("norm x=%f xhat=%f"%(torch.linalg.norm(x0),
-     torch.linalg.norm(xhat0)))
-  torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),
-     torch.cat((y1D1,y1D2),1),torch.cat((xrec,xerr),1)),
-     2).data, 'xx_'+str(nb)+'.png' )
- Mu=torch.cat((mu,yy1mu,yy2mu),1)
- kdist=mod(Mu)
- (nbatch,_)=Mu.shape
- dist=torch.zeros(Kc)
- for ck in range(Kc):
-   for cn in range(nbatch):
-     dist[ck]=dist[ck]+torch.sum(torch.pow(Mu[cn,:]-mod.M[ck,:],Khp))
- dist=dist/nbatch
- X[:,nb]=dist.detach().numpy()
- (values,indices)=torch.min(dist.view(Kc,1),0)
- print('%d %e %d'%(nb,kdist,indices[0])) 
- clusid[nb]=indices[0]
+with torch.no_grad():
+  for nb in range(nbase):
+   patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
+   x=x.cpu() # send to cpu
+   # get latent variable
+   x1,mu=net(x)
+   x11=(x-x1)/2
+   # vectorize
+   iy1=torch.flatten(x11,start_dim=2,end_dim=3)
+   iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
+   yy1,yy1mu=net1D1(iy1)
+   yy2,yy2mu=net1D2(iy2)
+   x2=yy1.view_as(x)
+   x3=torch.transpose(yy2.view_as(x),2,3)
+   # reconstruction
+   xrecon=x1+x2+x3
+   if not colour_output:
+    torchvision.utils.save_image( torch.cat((torch.cat((x[0,1],x1[0,1])),
+     torch.cat((x2[0,1],x3[0,1]))
+     ),1).data, 'xx_'+str(nb)+'.png' )
+   else:
+    x0=channel_to_rgb(x[0])
+    xhat0=channel_to_rgb(x1[0])
+    y1D1=channel_to_rgb(x2[0,0:4])
+    y1D2=channel_to_rgb(x3[0,0:4])
+    xrec=channel_to_rgb(xrecon[0,0:4])
+    xerr=channel_to_rgb(x[0,0:4]-xrecon[0,0:4])
+    print("norm x=%f xhat=%f"%(torch.linalg.norm(x0),
+       torch.linalg.norm(xhat0)))
+    torchvision.utils.save_image( torch.cat((torch.cat((x0,xhat0),1),
+       torch.cat((y1D1,y1D2),1),torch.cat((xrec,xerr),1)),
+       2).data, 'xx_'+str(nb)+'.png' )
+   Mu=torch.cat((mu,yy1mu,yy2mu),1)
+   kdist=mod(Mu)
+   (nbatch,_)=Mu.shape
+   dist=torch.zeros(Kc)
+   for ck in range(Kc):
+     for cn in range(nbatch):
+       dist[ck]=dist[ck]+torch.sum(torch.pow(torch.linalg.norm(Mu[cn,:]-mod.M[ck,:],2),Khp))
+   dist=dist/nbatch 
+   X[:,nb]=dist.detach().numpy()
+   (values,indices)=torch.min(dist.view(Kc,1),0)
+   print('%d %e %d'%(nb,kdist,indices[0])) 
+   clusid[nb]=indices[0]
 
+# subtract mean from each row of X
+for ck in range(Kc):
+ X[ck]=X[ck]-np.mean(X[ck])
 
-
+mydict={'X':X}
+savemat('X.mat',mydict)
 
 ### tSNE
 tsne=TSNE(n_components=2,random_state=99,verbose=True)

@@ -158,11 +158,12 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   return patchx,patchy,y
 
 ########################################################
-def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8):
+def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,give_baseline=False):
   # open LOFAR H5 file, read data from a SAP,
   # return data for given baseline_id
   # num_channels=4 real,imag XX and YY
   # num_channels=8 real,imag XX, XY, YX and YY 
+  # if give_basline=True, also return tuple [station1,station2] of the selected baseline
 
   assert(num_channels==4 or num_channels==8)
   f=h5py.File(filename,'r')
@@ -170,6 +171,8 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8)
   g=f['measurement']['saps'][SAP]['visibilities']
   # scale factors for the dataset (float32)
   h=f['measurement']['saps'][SAP]['visibility_scale_factors']
+  if give_baseline:
+    baselines=f['measurement']['saps'][SAP]['baselines']
 
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
   # h shape : nbase, nfreq, npol
@@ -237,7 +240,10 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8)
   ystd=y.std()
   y.sub_(ymean).div_(ystd)
 
-  return patchx,patchy,y
+  if not give_baseline:
+    return patchx,patchy,y
+  else:
+    return baselines[mybase],patchx,patchy,y
 
 
 ########################################################
@@ -299,14 +305,22 @@ def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32,num_channe
 
 
 ########################################################
-def get_metadata(filename,SAP):
+def get_metadata(filename,SAP,give_baseline=False):
   # open LOFAR H5 file, read metadata from a SAP,
-  # return baselines, time, frequencies, polarizations, real/imag
+  # return number of baselines, time, frequencies, polarizations, real/imag
+  # if give_baseline=True, also return ndarray of baselines
 
   f=h5py.File(filename,'r')
   # select a dataset SAP (int8)
   g=f['measurement']['saps'][SAP]['visibilities']
 
+  if give_baseline:
+    baselines=f['measurement']['saps'][SAP]['baselines']
+    (nbase,_)=baselines.shape
+    bline=np.ndarray(baselines.shape,dtype=object)
+    for ci in range(nbase):
+      bline[ci]=baselines[ci]
+    return bline,g.shape
   return g.shape
  
 
