@@ -11,6 +11,7 @@ Files included are:
 
 ``` lbfgsnew.py ``` : Improved LBFGS optimizer.
 
+``` train_graph.py ``` : Build a line-graph using baselines and train a classifier (Pytorch Geometric).
 
 <img src="./figures/arch.png" alt="Architecture of the full system" width="900"/>
 
