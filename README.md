@@ -16,7 +16,7 @@ Files included are:
 <img src="./figures/arch.png" alt="Architecture of the full system" width="900"/>
 
 
-The above image shows the two autoencoders that extract latent space representations for the real and Fourier space spectrograms.
+The above image summarizes the three autoencoders that extract latent space representations and the training scheme with various constraints.
 
 
 <img src="./figures/errors.png" alt="LBFGS vs Adam" width="500"/>
