@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 import numpy as np
 import h5py
 import glob
-import os
+import os,math
 
 # Should we recursively search for training data?
 rec_file_search=True
@@ -46,7 +46,7 @@ def channel_to_rgb(x):
   return y
 
 ########################################################
-def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8,transform=None):
+def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8,transform=None,uvdist=False):
   # len(file_list)==len(SAP_list)
   # SAP_list should match each file name in file_list
   # open LOFAR H5 file, read data from a SAP,
@@ -58,6 +58,11 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   # each baseline patches will be transformed, and appended to the original data
   # in other words, the number of patches output will be 2 times the original value
   # the original and transformed data will be grouped according to the baselines
+  # if uvdist=True, return u,v distance in wavelengths (per each patch)
+  # average value for the central frequency and start time of observation
+
+  # light speed
+  c=2.99792458e8
 
   assert(len(file_list)==len(SAP_list))
   assert(num_channels==4 or num_channels==8)
@@ -79,6 +84,28 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   x=torch.zeros(batch_size,num_channels,max(ntime,patch_size),max(nfreq,patch_size)).to(mydevice,non_blocking=True)
   # randomly select baseline subset
   baselinelist=np.random.randint(0,nbase,batch_size)
+
+  if uvdist:
+    # observation start time
+    hms=f['measurement']['info']['start_time'][0].decode('ascii').split()[1].split(sep=':')
+    # time in hours, in [0,24]
+    start_time=float(hms[0])+float(hms[1])/60.0+float(hms[2])/3600
+    # convert to radians
+    theta=start_time/24.0*(2*math.pi)
+    # frequencies in Hz
+    frq=f['measurement']['saps'][SAP]['central_frequencies']
+    Nf0=frq.shape[0]//2
+    # central frequency
+    freq0=frq[Nf0]
+    # 1/lambda=freq0/c
+    inv_lambda=freq0/c
+    # rotation matrix =[cos(theta) sin(theta); -sin(theta) cos(theta)]
+    rot00=math.cos(theta)*inv_lambda
+    rot01=math.sin(theta)*inv_lambda
+
+    baselines=f['measurement']['saps'][SAP]['baselines']
+    xyz=f['measurement']['saps'][SAP]['antenna_locations']['XYZ']
+    uv=torch.zeros(batch_size,2).to(mydevice,non_blocking=True)
 
   ck=0
   for mybase in baselinelist:
@@ -111,6 +138,16 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
       x[ck,3,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
       x[ck,3,:ntime,:nfreq]=x[ck,3,:ntime,:nfreq]*scalefac
 
+   if uvdist:
+     # get u,v coordinates for this baseline
+     # convert xx,yy to wavelengths and rotate by theta
+     xx=xyz[baselines[mybase][0]][0]-xyz[baselines[mybase][1]][0]
+     yy=xyz[baselines[mybase][0]][1]-xyz[baselines[mybase][1]][1]
+     uu=xx*rot00+yy*rot01
+     vv=-xx*rot01+yy*rot00
+     uv[ck,0]=uu
+     uv[ck,1]=vv
+
    ck=ck+1
 
 
@@ -122,12 +159,21 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
   # create a new tensor
   y1=torch.zeros([nbase1*patchx*patchy,nchan1,nx,ny]).to(mydevice,non_blocking=True)
 
+  if uvdist:
+    # create a tensor for uv coordinates to match size of y1
+    uv1=torch.zeros([nbase1*patchx*patchy,2]).to(mydevice,non_blocking=True)
+
   # copy data ordered according to the patches
   ck=0
   for ci in range(patchx):
    for cj in range(patchy):
      y1[ck*nbase1:(ck+1)*nbase1,:,:,:]=y[:,:,ci,cj,:,:]
      ck=ck+1
+
+  if uvdist:
+    for ci in range(nbase1):
+     uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,0]=uv[ci,0]
+     uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,1]=uv[ci,1]
 
   y = y1
   del x,y1
@@ -155,15 +201,25 @@ def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_d
     y=y1
 
   # Note: if transform is given, size of y is doubled
-  return patchx,patchy,y
+  # size y: batchsize,channels,patch_size,patch_size
+  # size uv1: batchsize,2
+  if uvdist:
+    return patchx,patchy,y,uv1
+  else:
+    return patchx,patchy,y
 
 ########################################################
-def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,give_baseline=False):
+def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,give_baseline=False,uvdist=False):
   # open LOFAR H5 file, read data from a SAP,
   # return data for given baseline_id
   # num_channels=4 real,imag XX and YY
   # num_channels=8 real,imag XX, XY, YX and YY 
   # if give_basline=True, also return tuple [station1,station2] of the selected baseline
+  # if uvdist=True, return u,v distance in wavelengths (per each patch)
+  # average value for the central frequency and start time of observation
+
+  # light speed
+  c=2.99792458e8
 
   assert(num_channels==4 or num_channels==8)
   f=h5py.File(filename,'r')
@@ -171,7 +227,7 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,
   g=f['measurement']['saps'][SAP]['visibilities']
   # scale factors for the dataset (float32)
   h=f['measurement']['saps'][SAP]['visibility_scale_factors']
-  if give_baseline:
+  if give_baseline or uvdist:
     baselines=f['measurement']['saps'][SAP]['baselines']
 
   (nbase,ntime,nfreq,npol,ncomplex)=g.shape
@@ -181,6 +237,28 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,
   x=torch.zeros(1,num_channels,max(ntime,patch_size),max(nfreq,patch_size))
   
   mybase=baseline_id
+  if uvdist:
+    # observation start time
+    hms=f['measurement']['info']['start_time'][0].decode('ascii').split()[1].split(sep=':')
+    # time in hours, in [0,24]
+    start_time=float(hms[0])+float(hms[1])/60.0+float(hms[2])/3600
+    # convert to radians
+    theta=start_time/24.0*(2*math.pi)
+    # frequencies in Hz
+    frq=f['measurement']['saps'][SAP]['central_frequencies']
+    Nf0=frq.shape[0]//2
+    # central frequency
+    freq0=frq[Nf0]
+    # 1/lambda=freq0/c
+    inv_lambda=freq0/c
+    # rotation matrix =[cos(theta) sin(theta); -sin(theta) cos(theta)]
+    rot00=math.cos(theta)*inv_lambda
+    rot01=math.sin(theta)*inv_lambda
+
+    baselines=f['measurement']['saps'][SAP]['baselines']
+    xyz=f['measurement']['saps'][SAP]['antenna_locations']['XYZ']
+    uv=torch.zeros(1,2).to(mydevice,non_blocking=True)
+
   # this is 8 channels in torch tensor
   if num_channels==8:
    for ci in range(4):
@@ -210,7 +288,15 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,
     x[0,3,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
     x[0,3,:ntime,:nfreq]=x[0,3,:ntime,:nfreq]*scalefac
 
-
+  if uvdist:
+     # get u,v coordinates for this baseline
+     # convert xx,yy to wavelengths and rotate by theta
+     xx=xyz[baselines[mybase][0]][0]-xyz[baselines[mybase][1]][0]
+     yy=xyz[baselines[mybase][0]][1]-xyz[baselines[mybase][1]][1]
+     uu=xx*rot00+yy*rot01
+     vv=-xx*rot01+yy*rot00
+     uv[0,0]=uu
+     uv[0,1]=vv
 
   stride = patch_size//2 # patch stride (with 1/2 overlap)
   y = x.unfold(2, patch_size, stride).unfold(3, patch_size, stride)
@@ -219,12 +305,21 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,
   # create a new tensor
   y1=torch.zeros([nbase1*patchx*patchy,nchan1,nx,ny]).to(mydevice,non_blocking=True)
 
+  if uvdist:
+    # create a tensor for uv coordinates to match size of y1
+    uv1=torch.zeros([nbase1*patchx*patchy,2]).to(mydevice,non_blocking=True)
+
   # copy data ordered according to the patches
   ck=0
   for ci in range(patchx):
    for cj in range(patchy):
      y1[ck*nbase1:(ck+1)*nbase1,:,:,:]=y[:,:,ci,cj,:,:]
      ck=ck+1
+
+  if uvdist:
+    for ci in range(nbase1):
+      uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,0]=uv[ci,0]
+      uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,1]=uv[ci,1]
 
   y = y1
   del x,y1
@@ -241,10 +336,15 @@ def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,
   y.sub_(ymean).div_(ystd)
 
   if not give_baseline:
-    return patchx,patchy,y
+    if uvdist:
+      return patchx,patchy,y,uv1
+    else:
+      return patchx,patchy,y
   else:
-    return baselines[mybase],patchx,patchy,y
-
+    if uvdist:
+      return baselines[mybase],patchx,patchy,y,uv1
+    else:
+      return baselines[mybase],patchx,patchy,y
 
 ########################################################
 def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32,num_channels=8):
