@@ -36,7 +36,7 @@ file_list,sap_list=get_fileSAP('/media/sarod')
 
 L=64#256 # latent dimension in real space
 Lt=16#32 # latent dimensions in time/frequency axes (1D CNN)
-Kc=20 # K-harmonic clusters
+Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 alpha=0.01 # loss+alpha*cluster_loss
 beta=0.01 # loss+beta*cluster_similarity (penalty)

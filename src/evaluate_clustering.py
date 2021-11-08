@@ -17,7 +17,7 @@ from sklearn.preprocessing import StandardScaler
 
 L=64#256 # latent dimension
 Lt=16#32 # latent dimensions in time/frequency axes (1D CNN)
-Kc=20 # K-harmonic clusters
+Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 Ko=10 # final hard clusters
 
