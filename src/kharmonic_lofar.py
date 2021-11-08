@@ -10,6 +10,7 @@ import torch.fft
 
 # Note: use_cuda=True is set in lofar_models.py, so make sure to change it
 # if you change it in this script as well
+from lofar_tools import *
 from lofar_models import *
 # Train autoencoder and k-harmonic mean clustering using LOFAR data
 
@@ -23,7 +24,7 @@ else:
 #torch.manual_seed(69)
 default_batch=12 # no. of baselines per iter, batch size determined by how many patches are created
 num_epochs=10 # total epochs
-Niter=40 # how many minibatches are considered for an epoch
+Niter=80 # how many minibatches are considered for an epoch
 Nadmm=10 # Inner optimization iterations (ADMM)
 save_model=True
 load_model=True
@@ -33,13 +34,13 @@ load_model=True
 file_list,sap_list=get_fileSAP('/media/sarod')
 # or ../../drive/My Drive/Colab Notebooks/
 
-L=256 # latent dimension in real space
-Lt=32 # latent dimensions in time/frequency axes (1D CNN)
-Kc=10 # clusters
+L=64#256 # latent dimension in real space
+Lt=16#32 # latent dimensions in time/frequency axes (1D CNN)
+Kc=20 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
-alpha=1.0 # loss+alpha*cluster_loss
-beta=1.0 # loss+beta*cluster_similarity (penalty)
-gamma=1.0 # loss+gamma*augmentation_loss
+alpha=0.01 # loss+alpha*cluster_loss
+beta=0.01 # loss+beta*cluster_similarity (penalty)
+gamma=0.01 # loss+gamma*augmentation_loss
 rho=1 # ADMM rho
 
 # patch size of images
@@ -47,8 +48,12 @@ patch_size=128
 
 num_in_channels=4 # real,imag XX,YY
 
+# harmonic scales to use (sin,cos)(scale*u, scale*v) and so on
+# these can be regarded as l,m sky coordinate distance where sources can be present
+harmonic_scales=torch.tensor([1e-4, 1e-3, 1e-2, 1e-1]).to(mydevice)
+
 # for 128x128 patches
-net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels).to(mydevice)
+net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales).to(mydevice)
 # 1D autoencoders
 netT=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels).to(mydevice)
 netF=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels).to(mydevice)
@@ -75,13 +80,13 @@ from lbfgsnew import LBFGSNew # custom optimizer
 criterion=nn.MSELoss(reduction='sum')
 # start with empty parameter list
 params=list()
-#params.extend(list(net.parameters()))
+params.extend(list(net.parameters()))
 #params.extend(list(netT.parameters()))
 #params.extend(list(netF.parameters()))
-params.extend(list(mod.parameters()))
+#params.extend(list(mod.parameters()))
 
-#optimizer=optim.Adam(params, lr=0.001)
-optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
+optimizer=optim.Adam(params, lr=0.0001) # 0.001
+#optimizer = LBFGSNew(params, history_size=7, max_iter=4, line_search_fn=True,batch_mode=True)
 
 ############################################################
 # Augmented loss function
@@ -106,9 +111,10 @@ def augmented_loss(mu,batch_per_bline,batch_size):
 for epoch in range(num_epochs):
   for i in range(Niter):
     # get the inputs
-    patchx,patchy,inputs=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True,num_channels=num_in_channels)
+    patchx,patchy,inputs,uvcoords=get_data_minibatch(file_list,sap_list,batch_size=default_batch,patch_size=patch_size,normalize_data=True,num_channels=num_in_channels,uvdist=True)
     # wrap them in variable
     x=Variable(inputs).to(mydevice)
+    uv=Variable(uvcoords).to(mydevice)
     (nbatch,nchan,nx,ny)=inputs.shape 
     # nbatch = patchx x patchy x default_batch
     # i.e., one baseline (per polarization, real,imag) will create patchx x patchy batches
@@ -122,7 +128,7 @@ for epoch in range(num_epochs):
       def closure():
         if torch.is_grad_enabled():
          optimizer.zero_grad()
-        x1,mu=net(x)
+        x1,mu=net(x,uv)
         # residual
         x11=(x-x1)/2
         # pass through 1D CNN
@@ -164,7 +170,7 @@ for epoch in range(num_epochs):
       optimizer.step(closure)
       # update Lagrange multipliers
       with torch.no_grad():
-        x1,_=net(x)
+        x1,_=net(x,uv)
         x11=(x-x1)/2
         iy1=torch.flatten(x11,start_dim=2,end_dim=3)
         yyT,_=netT(iy1)
@@ -180,6 +186,11 @@ for epoch in range(num_epochs):
         y2=y2+rho*(x11-x2).view(-1)
         y3=y3+rho*(x11-x3).view(-1)
         #print("%d %f %f %f"%(admm,torch.norm(y1),torch.norm(y2),torch.norm(y3)))
+  
+  # free unused memory
+  if use_cuda:
+     del x,x1,x11,x2,x3,iy1,iy2,yyT,yyF,y1,y2,y3
+     torch.cuda.empty_cache()
 
 if save_model:
   torch.save({

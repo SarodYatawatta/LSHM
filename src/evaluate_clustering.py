@@ -15,9 +15,9 @@ from sklearn.preprocessing import StandardScaler
 
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
-L=256 # latent dimension
-Lt=32 # latent dimensions in time/frequency axes (1D CNN)
-Kc=10 # K-harmonic clusters
+L=64#256 # latent dimension
+Lt=16#32 # latent dimensions in time/frequency axes (1D CNN)
+Kc=20 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 Ko=10 # final hard clusters
 
@@ -26,16 +26,21 @@ patch_size=128
 # enable this to create psuedocolor images using all XX and YY
 colour_output=True
 
+from lofar_tools import *
 from lofar_models import *
 
 num_in_channels=4 # real,imag XX,YY
+
+# harmonic scales to use (sin,cos)(scale*u, scale*v) and so on
+harmonic_scales=torch.tensor([1e-4, 1e-3, 1e-2, 1e-1]).to('cpu')
+
 # for 128x128 patches
-net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels)
+net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales)
 
 # 1D autoencoders
 net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
 net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
-mod=Kmeans(latent_dim=(L+Lt+Lt),p=Khp)
+mod=Kmeans(latent_dim=(L+Lt+Lt),K=Kc,p=Khp)
 
 checkpoint=torch.load('./net.model',map_location=torch.device('cpu'))
 net.load_state_dict(checkpoint['model_state_dict'])
@@ -69,10 +74,11 @@ clusid=np.zeros(nbase,dtype=np.float64)
 # iterate over each baselines
 with torch.no_grad():
   for nb in range(nbase):
-   patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels)
+   patchx,patchy,x,uvcoords=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels,uvdist=True)
    x=x.cpu() # send to cpu
+   uv=uvcoords.cpu()
    # get latent variable
-   x1,mu=net(x)
+   x1,mu=net(x,uv)
    x11=(x-x1)/2
    # vectorize
    iy1=torch.flatten(x11,start_dim=2,end_dim=3)

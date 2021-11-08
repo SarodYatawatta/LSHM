@@ -5,569 +5,19 @@ import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 import numpy as np
-import h5py
-import glob
-import os,math
 
-# Should we recursively search for training data?
-rec_file_search=True
-# (try to) use a GPU for computation?
-use_cuda=True
-if use_cuda and torch.cuda.is_available():
-  mydevice=torch.device('cuda')
-else:
-  mydevice=torch.device('cpu')
-
-########################################################
-def torch_fftshift(real, imag):
-  # FFTshift method, since torch does not have it yet
-  # only work with dims 2,3
-  for dim in range(2, len(real.size())):
-    real = torch.roll(real, dims=dim, shifts=real.size(dim)//2)
-    imag = torch.roll(imag, dims=dim, shifts=imag.size(dim)//2)
-  return real, imag
-
-###############################
-def channel_to_rgb(x):
-  # x: 4 x nx x ny image
-  # output 3 x nx ny image for RGB plot
-  (nchan,nx,ny)=x.shape
-  assert(nchan==4)
-
-  # normalize
-  xmean=x.mean()
-  xstd=x.std()
-  x.sub_(xmean).div_(xstd)
-
-  y=torch.zeros(3,nx,ny)
-  y[0]=(x[0]+0.3*x[1])/1.3
-  y[1]=(0.7*x[1]+0.7*x[2])/1.4
-  y[2]=(0.3*x[2]+x[3])/1.3
-  return y
-
-########################################################
-def get_data_minibatch(file_list,SAP_list,batch_size=2,patch_size=32,normalize_data=False,num_channels=8,transform=None,uvdist=False):
-  # len(file_list)==len(SAP_list)
-  # SAP_list should match each file name in file_list
-  # open LOFAR H5 file, read data from a SAP,
-  # randomly select number of baselines equal to batch_size
-  # and sample patches and return input for training
-  # num_channels=4 real,imag XX and YY
-  # num_channels=8 real,imag XX, XY, YX and YY 
-  # if transform (torchvision.transforms) is given (not None)
-  # each baseline patches will be transformed, and appended to the original data
-  # in other words, the number of patches output will be 2 times the original value
-  # the original and transformed data will be grouped according to the baselines
-  # if uvdist=True, return u,v distance in wavelengths (per each patch)
-  # average value for the central frequency and start time of observation
-
-  # light speed
-  c=2.99792458e8
-
-  assert(len(file_list)==len(SAP_list))
-  assert(num_channels==4 or num_channels==8)
-  file_id=np.random.randint(0,len(file_list))
-  filename=file_list[file_id]
-  SAP=SAP_list[file_id]
-
-  # randomly select a file and corresponding SAP
-  f=h5py.File(filename,'r')
-  # select a dataset SAP (int8)
-  g=f['measurement']['saps'][SAP]['visibilities']
-  # scale factors for the dataset (float32)
-  h=f['measurement']['saps'][SAP]['visibility_scale_factors']
-
-  (nbase,ntime,nfreq,npol,ncomplex)=g.shape
-  # h shape : nbase, nfreq, npol
-
-  # pad zeros if ntime or nfreq is smaller than patch_size
-  x=torch.zeros(batch_size,num_channels,max(ntime,patch_size),max(nfreq,patch_size)).to(mydevice,non_blocking=True)
-  # randomly select baseline subset
-  baselinelist=np.random.randint(0,nbase,batch_size)
-
-  if uvdist:
-    # observation start time
-    hms=f['measurement']['info']['start_time'][0].decode('ascii').split()[1].split(sep=':')
-    # time in hours, in [0,24]
-    start_time=float(hms[0])+float(hms[1])/60.0+float(hms[2])/3600
-    # convert to radians
-    theta=start_time/24.0*(2*math.pi)
-    # frequencies in Hz
-    frq=f['measurement']['saps'][SAP]['central_frequencies']
-    Nf0=frq.shape[0]//2
-    # central frequency
-    freq0=frq[Nf0]
-    # 1/lambda=freq0/c
-    inv_lambda=freq0/c
-    # rotation matrix =[cos(theta) sin(theta); -sin(theta) cos(theta)]
-    rot00=math.cos(theta)*inv_lambda
-    rot01=math.sin(theta)*inv_lambda
-
-    baselines=f['measurement']['saps'][SAP]['baselines']
-    xyz=f['measurement']['saps'][SAP]['antenna_locations']['XYZ']
-    uv=torch.zeros(batch_size,2).to(mydevice,non_blocking=True)
-
-  ck=0
-  for mybase in baselinelist:
-   if num_channels==8:
-     # this is 8 channels in torch tensor
-     for ci in range(4):
-      # get visibility scales
-      scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
-      # add missing (time) dimension
-      scalefac=scalefac[None,:]
-      x[ck,2*ci,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
-      x[ck,2*ci,:ntime,:nfreq]=x[ck,2*ci,:ntime,:nfreq]*scalefac
-      x[ck,2*ci+1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
-      x[ck,2*ci+1,:ntime,:nfreq]=x[ck,2*ci+1,:ntime,:nfreq]*scalefac
-   else: # num_channels==4
-      ci=0
-      # get visibility scales
-      scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
-      # add missing (time) dimension
-      scalefac=scalefac[None,:]
-      x[ck,0,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
-      x[ck,0,:ntime,:nfreq]=x[ck,0,:ntime,:nfreq]*scalefac
-      x[ck,1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
-      x[ck,1,:ntime,:nfreq]=x[ck,1,:ntime,:nfreq]*scalefac
-      ci=3
-      scalefac=torch.from_numpy(h[mybase,:,ci]).to(mydevice,non_blocking=True)
-      scalefac=scalefac[None,:]
-      x[ck,2,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
-      x[ck,2,:ntime,:nfreq]=x[ck,2,:ntime,:nfreq]*scalefac
-      x[ck,3,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
-      x[ck,3,:ntime,:nfreq]=x[ck,3,:ntime,:nfreq]*scalefac
-
-   if uvdist:
-     # get u,v coordinates for this baseline
-     # convert xx,yy to wavelengths and rotate by theta
-     xx=xyz[baselines[mybase][0]][0]-xyz[baselines[mybase][1]][0]
-     yy=xyz[baselines[mybase][0]][1]-xyz[baselines[mybase][1]][1]
-     uu=xx*rot00+yy*rot01
-     vv=-xx*rot01+yy*rot00
-     uv[ck,0]=uu
-     uv[ck,1]=vv
-
-   ck=ck+1
-
-
-  #torchvision.utils.save_image(x[0,0].data, 'sample.png')
-  stride = patch_size//2 # patch stride (with 1/2 overlap)
-  y = x.unfold(2, patch_size, stride).unfold(3, patch_size, stride)
-  # get new shape
-  (nbase1,nchan1,patchx,patchy,nx,ny)=y.shape
-  # create a new tensor
-  y1=torch.zeros([nbase1*patchx*patchy,nchan1,nx,ny]).to(mydevice,non_blocking=True)
-
-  if uvdist:
-    # create a tensor for uv coordinates to match size of y1
-    uv1=torch.zeros([nbase1*patchx*patchy,2]).to(mydevice,non_blocking=True)
-
-  # copy data ordered according to the patches
-  ck=0
-  for ci in range(patchx):
-   for cj in range(patchy):
-     y1[ck*nbase1:(ck+1)*nbase1,:,:,:]=y[:,:,ci,cj,:,:]
-     ck=ck+1
-
-  if uvdist:
-    for ci in range(nbase1):
-     uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,0]=uv[ci,0]
-     uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,1]=uv[ci,1]
-
-  y = y1
-  del x,y1
-  # note: nbatch = batch_size x patchx x patchy
-  #(nbatch,nchan,nxx,nyy)=y.shape
-
-  # do some rough cleanup of data
-  ##y[y!=y]=0 # set NaN,Inf to zero
-  y.clamp_(-1e3,1e3) # clip high values
-
-  # normalize data
-  if normalize_data:
-   ymean=y.mean()
-   ystd=y.std()
-   y.sub_(ymean).div_(ystd)
-
-  # transform
-  if transform:
-    # create empty data (first dimension will be 2x  original)
-    y1=torch.zeros(2*nbase1*patchx*patchy,nchan1,nx,ny).to(mydevice,non_blocking=True)
-    # interleave original and transformed data according to the baseline
-    for ci in range(nbase1):
-      y1[2*ci*patchx*patchy:(2*ci+1)*patchx*patchy]=y[ci*patchx*patchy:(ci+1)*patchx*patchy]
-      y1[(2*ci+1)*patchx*patchy:(2*ci+2)*patchx*patchy]=transform(y[ci*patchx*patchy:(ci+1)*patchx*patchy])
-    y=y1
-
-  # Note: if transform is given, size of y is doubled
-  # size y: batchsize,channels,patch_size,patch_size
-  # size uv1: batchsize,2
-  if uvdist:
-    return patchx,patchy,y,uv1
-  else:
-    return patchx,patchy,y
-
-########################################################
-def get_data_for_baseline(filename,SAP,baseline_id,patch_size=32,num_channels=8,give_baseline=False,uvdist=False):
-  # open LOFAR H5 file, read data from a SAP,
-  # return data for given baseline_id
-  # num_channels=4 real,imag XX and YY
-  # num_channels=8 real,imag XX, XY, YX and YY 
-  # if give_basline=True, also return tuple [station1,station2] of the selected baseline
-  # if uvdist=True, return u,v distance in wavelengths (per each patch)
-  # average value for the central frequency and start time of observation
-
-  # light speed
-  c=2.99792458e8
-
-  assert(num_channels==4 or num_channels==8)
-  f=h5py.File(filename,'r')
-  # select a dataset SAP (int8)
-  g=f['measurement']['saps'][SAP]['visibilities']
-  # scale factors for the dataset (float32)
-  h=f['measurement']['saps'][SAP]['visibility_scale_factors']
-  if give_baseline or uvdist:
-    baselines=f['measurement']['saps'][SAP]['baselines']
-
-  (nbase,ntime,nfreq,npol,ncomplex)=g.shape
-  # h shape : nbase, nfreq, npol
-
-  # pad zeros if ntime or nfreq is smaller than patch_size
-  x=torch.zeros(1,num_channels,max(ntime,patch_size),max(nfreq,patch_size))
-  
-  mybase=baseline_id
-  if uvdist:
-    # observation start time
-    hms=f['measurement']['info']['start_time'][0].decode('ascii').split()[1].split(sep=':')
-    # time in hours, in [0,24]
-    start_time=float(hms[0])+float(hms[1])/60.0+float(hms[2])/3600
-    # convert to radians
-    theta=start_time/24.0*(2*math.pi)
-    # frequencies in Hz
-    frq=f['measurement']['saps'][SAP]['central_frequencies']
-    Nf0=frq.shape[0]//2
-    # central frequency
-    freq0=frq[Nf0]
-    # 1/lambda=freq0/c
-    inv_lambda=freq0/c
-    # rotation matrix =[cos(theta) sin(theta); -sin(theta) cos(theta)]
-    rot00=math.cos(theta)*inv_lambda
-    rot01=math.sin(theta)*inv_lambda
-
-    baselines=f['measurement']['saps'][SAP]['baselines']
-    xyz=f['measurement']['saps'][SAP]['antenna_locations']['XYZ']
-    uv=torch.zeros(1,2).to(mydevice,non_blocking=True)
-
-  # this is 8 channels in torch tensor
-  if num_channels==8:
-   for ci in range(4):
-    # get visibility scales
-    scalefac=torch.from_numpy(h[mybase,:,ci])
-    # add missing (time) dimension
-    scalefac=scalefac[None,:]
-    x[0,2*ci,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,2*ci,:ntime,:nfreq]=x[0,2*ci,:ntime,:nfreq]*scalefac
-    x[0,2*ci+1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,2*ci+1,:ntime,:nfreq]=x[0,2*ci+1,:ntime,:nfreq]*scalefac
-  else: # num_channels==4
-    ci=0
-    # get visibility scales
-    scalefac=torch.from_numpy(h[mybase,:,ci])
-    # add missing (time) dimension
-    scalefac=scalefac[None,:]
-    x[0,0,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,0,:ntime,:nfreq]=x[0,0,:ntime,:nfreq]*scalefac
-    x[0,1,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,1,:ntime,:nfreq]=x[0,1,:ntime,:nfreq]*scalefac
-    ci=3
-    scalefac=torch.from_numpy(h[mybase,:,ci])
-    scalefac=scalefac[None,:]
-    x[0,2,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,2,:ntime,:nfreq]=x[0,2,:ntime,:nfreq]*scalefac
-    x[0,3,:ntime,:nfreq]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,3,:ntime,:nfreq]=x[0,3,:ntime,:nfreq]*scalefac
-
-  if uvdist:
-     # get u,v coordinates for this baseline
-     # convert xx,yy to wavelengths and rotate by theta
-     xx=xyz[baselines[mybase][0]][0]-xyz[baselines[mybase][1]][0]
-     yy=xyz[baselines[mybase][0]][1]-xyz[baselines[mybase][1]][1]
-     uu=xx*rot00+yy*rot01
-     vv=-xx*rot01+yy*rot00
-     uv[0,0]=uu
-     uv[0,1]=vv
-
-  stride = patch_size//2 # patch stride (with 1/2 overlap)
-  y = x.unfold(2, patch_size, stride).unfold(3, patch_size, stride)
-  # get new shape
-  (nbase1,nchan1,patchx,patchy,nx,ny)=y.shape
-  # create a new tensor
-  y1=torch.zeros([nbase1*patchx*patchy,nchan1,nx,ny]).to(mydevice,non_blocking=True)
-
-  if uvdist:
-    # create a tensor for uv coordinates to match size of y1
-    uv1=torch.zeros([nbase1*patchx*patchy,2]).to(mydevice,non_blocking=True)
-
-  # copy data ordered according to the patches
-  ck=0
-  for ci in range(patchx):
-   for cj in range(patchy):
-     y1[ck*nbase1:(ck+1)*nbase1,:,:,:]=y[:,:,ci,cj,:,:]
-     ck=ck+1
-
-  if uvdist:
-    for ci in range(nbase1):
-      uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,0]=uv[ci,0]
-      uv1[ci*patchx*patchy:(ci+1)*patchx*patchy,1]=uv[ci,1]
-
-  y = y1
-  del x,y1
-  # note: nbatch = batch_size x patchx x patchy
-  #(nbatch,nchan,nxx,nyy)=y.shape
-
-  # do some rough cleanup of data
-  ##y[y!=y]=0 # set NaN,Inf to zero
-  y.clamp_(-1e6,1e6) # clip high values
-
-  # normalize data
-  ymean=y.mean()
-  ystd=y.std()
-  y.sub_(ymean).div_(ystd)
-
-  if not give_baseline:
-    if uvdist:
-      return patchx,patchy,y,uv1
-    else:
-      return patchx,patchy,y
-  else:
-    if uvdist:
-      return baselines[mybase],patchx,patchy,y,uv1
-    else:
-      return baselines[mybase],patchx,patchy,y
-
-########################################################
-def get_data_for_baseline_flat(filename,SAP,baseline_id,patch_size=32,num_channels=8):
-  # open LOFAR H5 file, read data from a SAP,
-  # return data for given baseline_id
-  # Note : 'without unfolding' 
-  # num_channels=4 real,imag XX and YY
-  # num_channels=8 real,imag XX, XY, YX and YY 
-  assert(num_channels==4 or num_channels==8)
-
-  f=h5py.File(filename,'r')
-  # select a dataset SAP (int8)
-  g=f['measurement']['saps'][SAP]['visibilities']
-  # scale factors for the dataset (float32)
-  h=f['measurement']['saps'][SAP]['visibility_scale_factors']
-
-  (nbase,ntime,nfreq,npol,ncomplex)=g.shape
-  # h shape : nbase, nfreq, npol
-
-  x=torch.zeros(1,num_channels,ntime,nfreq)
-  
-  mybase=baseline_id
-  if num_channels==8:
-   # this is 8 channels in torch tensor
-   for ci in range(4):
-    # get visibility scales
-    scalefac=torch.from_numpy(h[mybase,:,ci])
-    # add missing (time) dimension
-    scalefac=scalefac[None,:]
-    x[0,2*ci]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,2*ci]=x[0,2*ci]*scalefac
-    x[0,2*ci+1]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,2*ci+1]=x[0,2*ci+1]*scalefac
-  else: # num_channels==4
-    ci=0
-    # get visibility scales
-    scalefac=torch.from_numpy(h[mybase,:,ci])
-    # add missing (time) dimension
-    scalefac=scalefac[None,:]
-    x[0,0]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,0]=x[0,0]*scalefac
-    x[0,1]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,1]=x[0,1]*scalefac
-    ci=3
-    scalefac=torch.from_numpy(h[mybase,:,ci])
-    scalefac=scalefac[None,:]
-    x[0,2]=torch.from_numpy(g[mybase,:,:,ci,0])
-    x[0,2]=x[0,2]*scalefac
-    x[0,3]=torch.from_numpy(g[mybase,:,:,ci,1])
-    x[0,3]=x[0,3]*scalefac
-
-
-  # do some rough cleanup of data
-  ##y[y!=y]=0 # set NaN,Inf to zero
-  x.clamp_(-1e6,1e6) # clip high values
-
-  return x
-
-
-########################################################
-def get_metadata(filename,SAP,give_baseline=False):
-  # open LOFAR H5 file, read metadata from a SAP,
-  # return number of baselines, time, frequencies, polarizations, real/imag
-  # if give_baseline=True, also return ndarray of baselines
-
-  f=h5py.File(filename,'r')
-  # select a dataset SAP (int8)
-  g=f['measurement']['saps'][SAP]['visibilities']
-
-  if give_baseline:
-    baselines=f['measurement']['saps'][SAP]['baselines']
-    (nbase,_)=baselines.shape
-    bline=np.ndarray(baselines.shape,dtype=object)
-    for ci in range(nbase):
-      bline[ci]=baselines[ci]
-    return bline,g.shape
-  return g.shape
- 
-
-########################################################
-def get_fileSAP(pathname,pattern='L*.MS_extract.h5'):
-  # search in pathname for files matching 'pattern'
-  # test valid SAPs in each file and
-  # return file_list,sap_list for valid files and their SAPs
-  file_list=[]
-  sap_list=[]
-  if rec_file_search:
-    rawlist = glob.glob(pathname+'**'+os.sep+pattern,recursive=True)
-  else:
-    rawlist=glob.glob(pathname+os.sep+pattern)
-  # open each file and check valid saps
-  for filename in rawlist:
-    f=h5py.File(filename,'r')
-    g=f['measurement']['saps']
-    SAPs=[SAP for SAP in g]
-    # flag to remember if this file is useful
-    fileused=False
-    if len(SAPs)>0:
-     for SAP in SAPs:
-      try:
-       vis=f['measurement']['saps'][SAP]['visibilities']
-       (nbase,ntime,nfreq,npol,reim)=vis.shape
-       # select valid datasets (larger than 90 say)
-       if nbase>1 and nfreq>=90 and ntime>=90 and npol==4 and reim==2:
-         file_list.append(filename)
-         sap_list.append(SAP)
-         fileused=True
-      except:
-       print('Failed opening'+filename)
-    
-    if not fileused:
-      print('File '+filename+' not used') 
-
-  return file_list,sap_list
-########################################################
-
-########################################################
-class AutoEncoderCNN(nn.Module):
-    # AE CNN 
-    def __init__(self,latent_dim=128,K=10,channels=3):
-        super(AutoEncoderCNN,self).__init__()
-        self.latent_dim=latent_dim
-        self.K=K
-        # 32x32 -> 16x16
-        self.conv1=nn.Conv2d(channels, 12, 4, stride=2, padding=1)# in channels chan, out 12 chan, kernel 4x4
-        # 16x16 -> 8x8
-        self.conv2=nn.Conv2d(12, 24, 4, stride=2,  padding=1)# in 12 chan, out 24 chan, kernel 4x4
-        # 8x8 -> 4x4
-        self.conv3=nn.Conv2d(24, 48, 4, stride=2,  padding=1)# in 24 chan, out 48 chan, kernel 4x4
-        # 4x4 -> 2x2
-        self.conv4=nn.Conv2d(48, 96, 4, stride=2,  padding=1)# in 48 chan, out 96 chan, kernel 4x4
-
-        self.fc1=nn.Linear(384,self.latent_dim)
-
-        self.fc3=nn.Linear(self.latent_dim,384)
-        self.tconv1=nn.ConvTranspose2d(96,48,4,stride=2,padding=1)
-        self.tconv2=nn.ConvTranspose2d(48,24,4,stride=2,padding=1)
-        self.tconv3=nn.ConvTranspose2d(24,12,4,stride=2,padding=1)
-        self.tconv4=nn.ConvTranspose2d(12,channels,4,stride=2,padding=1)
-
-    def forward(self, x):
-        mu=self.encode(x)
-        return self.decode(mu), mu
-
-    def encode(self, x):
-        #In  1,1,32,32
-        x=F.elu(self.conv1(x)) # 1,12,16,16
-        x=F.elu(self.conv2(x)) # 1,24,8,8
-        x=F.elu(self.conv3(x)) # 1,48,4,4
-        x=F.elu(self.conv4(x)) # 1,96,2,2
-        x=torch.flatten(x,start_dim=1) # 1,96*2*2
-        x=F.elu(self.fc1(x)) # 1,latent_dim
-        return x # 1,latent_dim
-
-    def decode(self, z):
-        # In 1,latent_dim
-        x=self.fc3(z) # 1,384
-        x=torch.reshape(x,(-1,96,2,2)) # 1,96,2,2
-        x=F.elu(self.tconv1(x)) # 1,48,4,4
-        x=F.elu(self.tconv2(x)) # 1,24,8,8
-        x=F.elu(self.tconv3(x)) # 1,12,16,16
-        x=self.tconv4(x) # 1,8,32,32
-        return torch.tanh(x) # 1,channels,32,32
-
-########################################################
-class AutoEncoderCNN1(nn.Module):
-    # AE CNN 
-    def __init__(self,latent_dim=128,K=10,channels=3):
-        super(AutoEncoderCNN1,self).__init__()
-        self.latent_dim=latent_dim
-        self.K=K
-        # 64x64 -> 32x32
-        self.conv1=nn.Conv2d(channels, 12, 4, stride=2, padding=1)# in channels chan, out 12 chan, kernel 4x4
-        # 32x32 -> 16x16
-        self.conv2=nn.Conv2d(12, 24, 4, stride=2,  padding=1)# in 12 chan, out 24 chan, kernel 4x4
-        # 16x16 -> 8x8
-        self.conv3=nn.Conv2d(24, 48, 4, stride=2,  padding=1)# in 24 chan, out 48 chan, kernel 4x4
-        # 8x8 -> 4x4
-        self.conv4=nn.Conv2d(48, 96, 4, stride=2,  padding=1)# in 48 chan, out 96 chan, kernel 4x4
-        # 4x4 -> 2x2
-        self.conv5=nn.Conv2d(96, 192, 4, stride=2,  padding=1)# in 96 chan, out 192 chan, kernel 4x4
-        # 2x2x192=768
-        self.fc1=nn.Linear(768,self.latent_dim)
-
-        self.fc3=nn.Linear(self.latent_dim,768)
-        self.tconv0=nn.ConvTranspose2d(192,96,4,stride=2,padding=1)
-        self.tconv1=nn.ConvTranspose2d(96,48,4,stride=2,padding=1)
-        self.tconv2=nn.ConvTranspose2d(48,24,4,stride=2,padding=1)
-        self.tconv3=nn.ConvTranspose2d(24,12,4,stride=2,padding=1)
-        self.tconv4=nn.ConvTranspose2d(12,channels,4,stride=2,padding=1)
-
-    def forward(self, x):
-        mu=self.encode(x)
-        return self.decode(mu), mu
-
-    def encode(self, x):
-        #In  1,1,64,64
-        x=F.elu(self.conv1(x)) # 1,12,32,32
-        x=F.elu(self.conv2(x)) # 1,24,16,16
-        x=F.elu(self.conv3(x)) # 1,48,8,8
-        x=F.elu(self.conv4(x)) # 1,96,4,4
-        x=F.elu(self.conv5(x)) # 1,192,2,2
-        x=torch.flatten(x,start_dim=1) # 1,192*2*2=768
-        x=F.elu(self.fc1(x)) # 1,latent_dim
-        return x # 1,latent_dim
-
-    def decode(self, z):
-        # In 1,latent_dim
-        x=self.fc3(z) # 1,768
-        x=torch.reshape(x,(-1,192,2,2)) # 1,192,2,2
-        x=F.elu(self.tconv0(x)) # 1,96,4,4
-        x=F.elu(self.tconv1(x)) # 1,48,8,8
-        x=F.elu(self.tconv2(x)) # 1,24,16,16
-        x=F.elu(self.tconv3(x)) # 1,12,32,32
-        x=self.tconv4(x) # 1,channels,64,64
-        return torch.tanh(x) # 1,channels,64,64
+# This file contains various models used
 
 ########################################################
 class AutoEncoderCNN2(nn.Module):
     # AE CNN 
-    def __init__(self,latent_dim=128,channels=3):
+    def __init__(self,latent_dim=128,channels=3,harmonic_scales=None):
         super(AutoEncoderCNN2,self).__init__()
         self.latent_dim=latent_dim
+        # scale factors for harmonics of u,v coords
+        self.harmonic_scales=harmonic_scales
+        # harmonic dim: H x 2(u,v) x 2(cos,sin), H from above
+        self.harmonic_dim=(self.harmonic_scales.size()[0])*2*2
         # 128x128 -> 64x64
         self.conv0=nn.Conv2d(channels, 8, 4, stride=2, padding=1)# in channels chan, out 8 chan, kernel 4x4
         # 64x64 -> 32x32
@@ -580,10 +30,13 @@ class AutoEncoderCNN2(nn.Module):
         self.conv4=nn.Conv2d(48, 96, 4, stride=2,  padding=1)# in 48 chan, out 96 chan, kernel 4x4
         # 4x4 -> 2x2
         self.conv5=nn.Conv2d(96, 192, 4, stride=2,  padding=1)# in 96 chan, out 192 chan, kernel 4x4
+        # Linear layers to operate on u,v coordinate harmonics
+        self.fcuv1=nn.Linear(self.harmonic_dim,self.harmonic_dim)
+        self.fcuv3=nn.Linear(self.harmonic_dim,self.harmonic_dim)
         # 2x2x192=768
-        self.fc1=nn.Linear(768,self.latent_dim)
+        self.fc1=nn.Linear(768+self.harmonic_dim,self.latent_dim)
 
-        self.fc3=nn.Linear(self.latent_dim,768)
+        self.fc3=nn.Linear(self.latent_dim+self.harmonic_dim,768)
         self.tconv0=nn.ConvTranspose2d(192,96,4,stride=2,padding=1)
         self.tconv1=nn.ConvTranspose2d(96,48,4,stride=2,padding=1)
         self.tconv2=nn.ConvTranspose2d(48,24,4,stride=2,padding=1)
@@ -591,11 +44,14 @@ class AutoEncoderCNN2(nn.Module):
         self.tconv4=nn.ConvTranspose2d(12,8,4,stride=2,padding=1)
         self.tconv5=nn.ConvTranspose2d(8,channels,4,stride=2,padding=1)
 
-    def forward(self, x):
-        mu=self.encode(x)
-        return self.decode(mu), mu
+    def forward(self,x,uv):
+        uv=torch.kron(self.harmonic_scales,uv)
+        uv=torch.cat((torch.sin(uv),torch.cos(uv)),dim=1)
+        uv=torch.flatten(uv,start_dim=1)
+        mu=self.encode(x,uv)
+        return self.decode(mu,uv),mu
 
-    def encode(self, x):
+    def encode(self,x,uv):
         #In  1,4,128,128
         x=F.elu(self.conv0(x)) # 1,8,64,64
         x=F.elu(self.conv1(x)) # 1,12,32,32
@@ -604,11 +60,17 @@ class AutoEncoderCNN2(nn.Module):
         x=F.elu(self.conv4(x)) # 1,96,4,4
         x=F.elu(self.conv5(x)) # 1,192,2,2
         x=torch.flatten(x,start_dim=1) # 1,192*2*2=768
+        uv=F.elu(self.fcuv1(uv))
+        # combine uv harmonics
+        x=torch.cat((x,uv),dim=1)
         x=F.elu(self.fc1(x)) # 1,latent_dim
         return x # 1,latent_dim
 
-    def decode(self, z):
-        # In 1,latent_dim
+    def decode(self,z,uv):
+        # In z: 1,latent_dim
+        # harmonic input
+        uv=F.elu(self.fcuv3(uv))
+        z=torch.cat((z,uv),dim=1)
         x=self.fc3(z) # 1,768
         x=torch.reshape(x,(-1,192,2,2)) # 1,192,2,2
         x=F.elu(self.tconv0(x)) # 1,96,4,4
