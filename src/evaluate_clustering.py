@@ -15,11 +15,13 @@ from sklearn.preprocessing import StandardScaler
 
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
-L=64#256 # latent dimension
+L=256-32#256 # latent dimension
 Lt=16#32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 Ko=10 # final hard clusters
+# reconstruction ICA
+use_rica=True
 
 patch_size=128
 
@@ -35,11 +37,11 @@ num_in_channels=4 # real,imag XX,YY
 harmonic_scales=torch.tensor([1e-4, 1e-3, 1e-2, 1e-1]).to('cpu')
 
 # for 128x128 patches
-net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales)
+net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica)
 
 # 1D autoencoders
-net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
-net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
+net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica)
+net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica)
 mod=Kmeans(latent_dim=(L+Lt+Lt),K=Kc,p=Khp)
 
 checkpoint=torch.load('./net.model',map_location=torch.device('cpu'))
@@ -83,8 +85,8 @@ with torch.no_grad():
    # vectorize
    iy1=torch.flatten(x11,start_dim=2,end_dim=3)
    iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
-   yy1,yy1mu=net1D1(iy1)
-   yy2,yy2mu=net1D2(iy2)
+   yy1,yy1mu=net1D1(iy1,uv)
+   yy2,yy2mu=net1D2(iy2,uv)
    x2=yy1.view_as(x)
    x3=torch.transpose(yy2.view_as(x),2,3)
    # reconstruction
