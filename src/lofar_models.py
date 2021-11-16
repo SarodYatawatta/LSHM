@@ -16,8 +16,9 @@ class AutoEncoderCNN2(nn.Module):
         # (sin,cos)(scale*u,scale*v) for each scale in scales
         # rica: if true, use reconstruction ICA, z = W s
         # z: original latent, s: sparse latent, W: basis matrix
-        # encoder: sigma(W z) -> use L1 constraint
-        # decoder: sigma(W^T sigma(W z)) -> pass on to other layers
+        # encoder: sigma(W_1 z) -> use L1 constraint
+        # decoder: sigma(W_2^T sigma(W_1 z)) -> pass on to other layers
+        # note we keep W1 and W2 different
 
         super(AutoEncoderCNN2,self).__init__()
         self.rica=rica
@@ -44,7 +45,8 @@ class AutoEncoderCNN2(nn.Module):
         # 2x2x192=768
         self.fc1=nn.Linear(768+self.harmonic_dim,self.latent_dim)
         if self.rica:
-          self.fc2=nn.Linear(self.latent_dim,self.latent_dim)
+          self.fc2in=nn.Linear(self.latent_dim,self.latent_dim)
+          self.fc2out=nn.Linear(self.latent_dim,self.latent_dim)
 
         self.fc3=nn.Linear(self.latent_dim+self.harmonic_dim,768)
         self.tconv0=nn.ConvTranspose2d(192,96,4,stride=2,padding=1)
@@ -62,8 +64,8 @@ class AutoEncoderCNN2(nn.Module):
         if not self.rica:
           return self.decode(mu,uv),mu
         else:
-          mu=F.elu(mu.matmul(self.fc2.weight.t()))
-          muprime=F.elu(mu.matmul(self.fc2.weight))
+          mu=F.elu(self.fc2in(mu))
+          muprime=F.elu(self.fc2out(mu))
           return self.decode(muprime,uv),mu
 
     def encode(self,x,uv):
@@ -127,7 +129,8 @@ class AutoEncoder1DCNN(nn.Module):
         # 2^2x192=768
         self.fc1=nn.Linear(768+self.harmonic_dim,self.latent_dim)
         if self.rica:
-          self.fc2=nn.Linear(self.latent_dim,self.latent_dim)
+          self.fc2in=nn.Linear(self.latent_dim,self.latent_dim)
+          self.fc2out=nn.Linear(self.latent_dim,self.latent_dim)
 
         self.fc3=nn.Linear(self.latent_dim+self.harmonic_dim,768)
         # output_padding is added to match the input sizes
@@ -146,8 +149,8 @@ class AutoEncoder1DCNN(nn.Module):
         if not self.rica:
           return self.decode(mu), mu
         else:
-          mu=F.elu(mu.matmul(self.fc2.weight.t()))
-          muprime=F.elu(mu.matmul(self.fc2.weight))
+          mu=F.elu(self.fc2in(mu))
+          muprime=F.elu(self.fc2out(mu))
           return self.decode(muprime,uv),mu
 
     def encode(self, x, uv):
