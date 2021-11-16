@@ -11,8 +11,16 @@ import numpy as np
 ########################################################
 class AutoEncoderCNN2(nn.Module):
     # AE CNN 
-    def __init__(self,latent_dim=128,channels=3,harmonic_scales=None):
+    def __init__(self,latent_dim=128,channels=3,harmonic_scales=None,rica=False):
+        # harmonic_scales: Tensor 1xK of scales, to be used as
+        # (sin,cos)(scale*u,scale*v) for each scale in scales
+        # rica: if true, use reconstruction ICA, z = W s
+        # z: original latent, s: sparse latent, W: basis matrix
+        # encoder: sigma(W z) -> use L1 constraint
+        # decoder: sigma(W^T sigma(W z)) -> pass on to other layers
+
         super(AutoEncoderCNN2,self).__init__()
+        self.rica=rica
         self.latent_dim=latent_dim
         # scale factors for harmonics of u,v coords
         self.harmonic_scales=harmonic_scales
@@ -35,6 +43,8 @@ class AutoEncoderCNN2(nn.Module):
         self.fcuv3=nn.Linear(self.harmonic_dim,self.harmonic_dim)
         # 2x2x192=768
         self.fc1=nn.Linear(768+self.harmonic_dim,self.latent_dim)
+        if self.rica:
+          self.fc2=nn.Linear(self.latent_dim,self.latent_dim)
 
         self.fc3=nn.Linear(self.latent_dim+self.harmonic_dim,768)
         self.tconv0=nn.ConvTranspose2d(192,96,4,stride=2,padding=1)
@@ -49,7 +59,12 @@ class AutoEncoderCNN2(nn.Module):
         uv=torch.cat((torch.sin(uv),torch.cos(uv)),dim=1)
         uv=torch.flatten(uv,start_dim=1)
         mu=self.encode(x,uv)
-        return self.decode(mu,uv),mu
+        if not self.rica:
+          return self.decode(mu,uv),mu
+        else:
+          mu=F.elu(mu.matmul(self.fc2.weight.t()))
+          muprime=F.elu(mu.matmul(self.fc2.weight))
+          return self.decode(muprime,uv),mu
 
     def encode(self,x,uv):
         #In  1,4,128,128
@@ -85,9 +100,14 @@ class AutoEncoderCNN2(nn.Module):
 ########################################################
 class AutoEncoder1DCNN(nn.Module):
     # 1 dimensional AE CNN 
-    def __init__(self,latent_dim=128,channels=3):
+    def __init__(self,latent_dim=128,channels=3,harmonic_scales=None,rica=False):
         super(AutoEncoder1DCNN,self).__init__()
+        self.rica=rica
         self.latent_dim=latent_dim
+        # scale factors for harmonics of u,v coords
+        self.harmonic_scales=harmonic_scales
+        # harmonic dim: H x 2(u,v) x 2(cos,sin), H from above
+        self.harmonic_dim=(self.harmonic_scales.size()[0])*2*2
         # all dimensions below are vectorized values
         # 128^2x 1  -> 64^2x 1
         self.conv0=nn.Conv1d(channels, 8, 4, stride=4, padding=1)# in channels chan, out 8 chan, kernel 4x4
@@ -101,10 +121,15 @@ class AutoEncoder1DCNN(nn.Module):
         self.conv4=nn.Conv1d(48, 96, 4, stride=4,  padding=1)# in 48 chan, out 96 chan, kernel 4x4
         # 4^2x1 -> 2^2x1
         self.conv5=nn.Conv1d(96, 192, 4, stride=4,  padding=1)# in 96 chan, out 192 chan, kernel 4x4
+        # Linear layers to operate on u,v coordinate harmonics
+        self.fcuv1=nn.Linear(self.harmonic_dim,self.harmonic_dim)
+        self.fcuv3=nn.Linear(self.harmonic_dim,self.harmonic_dim)
         # 2^2x192=768
-        self.fc1=nn.Linear(768,self.latent_dim)
+        self.fc1=nn.Linear(768+self.harmonic_dim,self.latent_dim)
+        if self.rica:
+          self.fc2=nn.Linear(self.latent_dim,self.latent_dim)
 
-        self.fc3=nn.Linear(self.latent_dim,768)
+        self.fc3=nn.Linear(self.latent_dim+self.harmonic_dim,768)
         # output_padding is added to match the input sizes
         self.tconv0=nn.ConvTranspose1d(192,96,4,stride=4,padding=0,output_padding=0)
         self.tconv1=nn.ConvTranspose1d(96,48,4,stride=4,padding=0,output_padding=0)
@@ -113,11 +138,19 @@ class AutoEncoder1DCNN(nn.Module):
         self.tconv4=nn.ConvTranspose1d(12,8,4,stride=4,padding=0,output_padding=0)
         self.tconv5=nn.ConvTranspose1d(8,channels,4,stride=4,padding=0,output_padding=0)
 
-    def forward(self, x):
-        mu=self.encode(x)
-        return self.decode(mu), mu
+    def forward(self, x, uv):
+        uv=torch.kron(self.harmonic_scales,uv)
+        uv=torch.cat((torch.sin(uv),torch.cos(uv)),dim=1)
+        uv=torch.flatten(uv,start_dim=1)
+        mu=self.encode(x,uv)
+        if not self.rica:
+          return self.decode(mu), mu
+        else:
+          mu=F.elu(mu.matmul(self.fc2.weight.t()))
+          muprime=F.elu(mu.matmul(self.fc2.weight))
+          return self.decode(muprime,uv),mu
 
-    def encode(self, x):
+    def encode(self, x, uv):
         #In  1,4,128^2
         x=F.elu(self.conv0(x)) # 1,8,64^2
         x=F.elu(self.conv1(x)) # 1,12,32^2
@@ -126,11 +159,17 @@ class AutoEncoder1DCNN(nn.Module):
         x=F.elu(self.conv4(x)) # 1,96,4^2
         x=F.elu(self.conv5(x)) # 1,192,2^2
         x=torch.flatten(x,start_dim=1) # 1,192*2*2=768
+        uv=F.elu(self.fcuv1(uv))
+        # combine uv harmonics
+        x=torch.cat((x,uv),dim=1)
         x=F.elu(self.fc1(x)) # 1,latent_dim
         return x # 1,latent_dim
 
-    def decode(self, z):
+    def decode(self, z, uv):
         # In 1,latent_dim
+        # harmonic input
+        uv=F.elu(self.fcuv3(uv))
+        z=torch.cat((z,uv),dim=1)
         x=self.fc3(z) # 1,768
         x=torch.reshape(x,(-1,192,2*2)) # 1,192,2^2
         x=F.elu(self.tconv0(x)) # 1,96,4^2

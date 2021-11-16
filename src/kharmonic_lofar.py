@@ -8,7 +8,7 @@ import numpy as np
 import h5py
 import torch.fft
 
-# Note: use_cuda=True is set in lofar_models.py, so make sure to change it
+# Note: use_cuda=True is set in lofar_tools.py, so make sure to change it
 # if you change it in this script as well
 from lofar_tools import *
 from lofar_models import *
@@ -23,18 +23,18 @@ else:
 
 #torch.manual_seed(69)
 default_batch=12 # no. of baselines per iter, batch size determined by how many patches are created
-num_epochs=10 # total epochs
+num_epochs=5 # total epochs
 Niter=80 # how many minibatches are considered for an epoch
 Nadmm=10 # Inner optimization iterations (ADMM)
 save_model=True
-load_model=True
+load_model=False
 
 # scan directory to get valid datasets
 # file names have to match the SAP ids in the sap_list
 file_list,sap_list=get_fileSAP('/media/sarod')
 # or ../../drive/My Drive/Colab Notebooks/
 
-L=64#256 # latent dimension in real space
+L=256-32#256 # latent dimension in real space
 Lt=16#32 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
@@ -42,6 +42,10 @@ alpha=0.01 # loss+alpha*cluster_loss
 beta=0.01 # loss+beta*cluster_similarity (penalty)
 gamma=0.01 # loss+gamma*augmentation_loss
 rho=1 # ADMM rho
+
+# reconstruction ICA
+use_rica=True
+rica_lambda=0.01 # scale for L1 penalty
 
 # patch size of images
 patch_size=128
@@ -53,10 +57,10 @@ num_in_channels=4 # real,imag XX,YY
 harmonic_scales=torch.tensor([1e-4, 1e-3, 1e-2, 1e-1]).to(mydevice)
 
 # for 128x128 patches
-net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales).to(mydevice)
+net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica).to(mydevice)
 # 1D autoencoders
-netT=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels).to(mydevice)
-netF=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels).to(mydevice)
+netT=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica).to(mydevice)
+netF=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica).to(mydevice)
 # Kharmonic model
 mod=Kmeans(latent_dim=(L+Lt+Lt),K=Kc,p=Khp).to(mydevice)
 
@@ -133,12 +137,12 @@ for epoch in range(num_epochs):
         x11=(x-x1)/2
         # pass through 1D CNN
         iy1=torch.flatten(x11,start_dim=2,end_dim=3)
-        yyT,yyTmu=netT(iy1)
+        yyT,yyTmu=netT(iy1,uv)
         # reshape 1D outputs 
         x2=yyT.view_as(x11)
 
         iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
-        yyF,yyFmu=netF(iy2)
+        yyF,yyFmu=netF(iy2,uv)
         # reshape 1D outputs 
         x3=torch.transpose(yyF.view_as(x11),2,3)
 
@@ -157,13 +161,24 @@ for epoch in range(num_epochs):
         kdist=alpha*mod.clustering_error(Mu)
         clus_sim=beta*mod.cluster_similarity()
         augmentation_loss=gamma*augmented_loss(Mu,batch_per_bline,default_batch)
+
         loss=loss0+loss1+loss2+loss3+kdist+augmentation_loss+clus_sim
+        # RICA loss
+        if use_rica:
+          # use a differntiable approximation for L1 loss
+          rica_loss=rica_lambda*(torch.sum(torch.log(torch.cosh(mu)))/mu.numel()
+              +torch.sum(torch.log(torch.cosh(yyTmu)))/yyTmu.numel()
+              +torch.sum(torch.log(torch.cosh(yyFmu)))/yyFmu.numel())
+          loss += rica_loss
 
         if loss.requires_grad:
           loss.backward(retain_graph=True)
-          # output line contains:
-          # epoch batch admm total_loss loss_AE1 loss_AE2 loss_AE3 loss_KHarmonic loss_augmentation loss_similarity
-          print('%d %d %d %f %f %f %f %f %f %f'%(epoch,i,admm,loss0.data.item(),loss1.data.item(),loss2.data.item(),loss3.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
+          # each output line contains:
+          # epoch batch admm total_loss loss_AE1 loss_AE2 loss_AE3 loss_KHarmonic loss_augmentation loss_similarity loss_rica
+          if use_rica:
+            print('%d %d %d %f %f %f %f %f %f %f %f'%(epoch,i,admm,loss0.data.item(),loss1.data.item(),loss2.data.item(),loss3.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item(),rica_loss.data.item()))
+          else:
+            print('%d %d %d %f %f %f %f %f %f %f'%(epoch,i,admm,loss0.data.item(),loss1.data.item(),loss2.data.item(),loss3.data.item(),kdist.data.item(),augmentation_loss.data.item(),clus_sim.data.item()))
         return loss
 
       #update parameters
@@ -173,12 +188,12 @@ for epoch in range(num_epochs):
         x1,_=net(x,uv)
         x11=(x-x1)/2
         iy1=torch.flatten(x11,start_dim=2,end_dim=3)
-        yyT,_=netT(iy1)
+        yyT,_=netT(iy1,uv)
         # reshape 1D outputs 
         x2=yyT.view_as(x11)
 
         iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
-        yyF,_=netF(iy2)
+        yyF,_=netF(iy2,uv)
         # reshape 1D outputs 
         x3=torch.transpose(yyF.view_as(x11),2,3)
 
