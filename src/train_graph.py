@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 import h5py
 
+from lofar_tools import *
 from lofar_models import *
 
 from matplotlib import pyplot as plt
@@ -30,40 +31,50 @@ Ko=10 # final hard clusters
 
 patch_size=128
 
+load_model=False
+
 # enable this to create psuedocolor images using all XX and YY
 colour_output=True
 
+# reconstruction ICA
+use_rica=True
 
 num_in_channels=4 # real,imag XX,YY
+
+# harmonic scales to use (sin,cos)(scale*u, scale*v) and so on
+# these can be regarded as l,m sky coordinate distance where sources can be present
+harmonic_scales=torch.tensor([1e-4, 1e-3, 1e-2, 1e-1]).to(mydevice)
+
 # for 128x128 patches
-net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels)
+net=AutoEncoderCNN2(latent_dim=L,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica)
 
 # 1D autoencoders
-net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
-net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels)
+net1D1=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica)
+net1D2=AutoEncoder1DCNN(latent_dim=Lt,channels=num_in_channels,harmonic_scales=harmonic_scales,rica=use_rica)
 mod=Kmeans(latent_dim=(L+Lt+Lt),p=Khp)
 
-checkpoint=torch.load('./net.model',map_location=mydevice)
-net.load_state_dict(checkpoint['model_state_dict'])
-checkpoint=torch.load('./khm.model',map_location=mydevice)
-mod.load_state_dict(checkpoint['model_state_dict'])
-net.eval()
-mod.eval()
+if load_model:
+  checkpoint=torch.load('./net.model',map_location=mydevice)
+  net.load_state_dict(checkpoint['model_state_dict'])
+  checkpoint=torch.load('./khm.model',map_location=mydevice)
+  mod.load_state_dict(checkpoint['model_state_dict'])
+  net.eval()
+  mod.eval()
 
-checkpoint=torch.load('./netT.model',map_location=mydevice)
-net1D1.load_state_dict(checkpoint['model_state_dict'])
-checkpoint=torch.load('./netF.model',map_location=mydevice)
-net1D2.load_state_dict(checkpoint['model_state_dict'])
-net1D1.eval()
-net1D2.eval()
+  checkpoint=torch.load('./netT.model',map_location=mydevice)
+  net1D1.load_state_dict(checkpoint['model_state_dict'])
+  checkpoint=torch.load('./netF.model',map_location=mydevice)
+  net1D2.load_state_dict(checkpoint['model_state_dict'])
+  net1D1.eval()
+  net1D2.eval()
 
 net.to(mydevice)
 mod.to(mydevice)
 net1D1.to(mydevice)
 net1D2.to(mydevice)
 
-file_list=['/home/sarod/scratch1/H5/L785757.MS_extract.h5','/home/sarod/L798736.MS_extract.h5', '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L703385.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5']
-sap_list=['0','0', '0', '1', '1', '2', '1', '2', '0', '1', '2', '0', '1', '2', '1', '2', '1', '2', '1', '2', '1', '2', '0', '1', '2', '1', '2']
+
+file_list,sap_list=get_fileSAP('/media/sarod')
 
 which_sap=0 # valid in file_list/sap_list -7
 
@@ -71,8 +82,8 @@ which_sap=0 # valid in file_list/sap_list -7
 baselines,(nbase,nfreq,ntime,npol,ncomplex)=get_metadata(file_list[which_sap],sap_list[which_sap],give_baseline=True)
 
 # for debugging use a low value
-NBASE=1000
-#NBASE=nbase
+#NBASE=1000
+NBASE=nbase
 
 #########################################################################
 def build_edge_graph(baselines):
