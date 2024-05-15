@@ -62,9 +62,7 @@ torchvision.utils.save_image(mod.M.data,'M.png')
 mydict={'M':mod.M.data.numpy()}
 from scipy.io import savemat
 savemat('M.mat',mydict)
-file_list=['/home/sarod/L798736.MS_extract.h5', '/home/sarod/L785747.MS_extract.h5', '/home/sarod/L684188.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682620.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L682176.MS_extract.h5', '/home/sarod/L775633.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L686974.MS_extract.h5', '/home/sarod/L703385.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L695483.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L672470.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L691918.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L696109.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785751.MS_extract.h5', '/home/sarod/L785757.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L696315.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5', '/home/sarod/L691530.MS_extract.h5']
-sap_list=['0', '0', '1', '1', '2', '1', '2', '0', '1', '2', '0', '1', '2', '1', '2', '1', '2', '1', '2', '1', '2', '0', '1', '2', '1', '2']
-
+file_list,sap_list=get_fileSAP('/media/sarod')
 which_sap=-16 # valid in file_list/sap_list -7
 
 # get nbase,nfreq,ntime,npol,ncomplex
