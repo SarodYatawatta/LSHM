@@ -14,7 +14,7 @@ from torch_geometric.utils import to_networkx
 from torch_geometric.nn import GCNConv
 import networkx as nx
 
-use_cuda=False
+use_cuda=True
 if use_cuda and torch.cuda.is_available():
   mydevice=torch.device('cuda')
 else:
@@ -23,15 +23,15 @@ else:
 
 # Load pre-trained model to evaluate clustering for given LOFAR dataset
 
-L=256 # latent dimension
-Lt=32 # latent dimensions in time/frequency axes (1D CNN)
+L=256-32 # latent dimension
+Lt=16 # latent dimensions in time/frequency axes (1D CNN)
 Kc=10 # K-harmonic clusters
 Khp=4 # order of K harmonic mean 1/|| ||^p norm
 Ko=10 # final hard clusters
 
 patch_size=128
 
-load_model=False
+load_model=True
 
 # enable this to create psuedocolor images using all XX and YY
 colour_output=True
@@ -74,7 +74,7 @@ net1D1.to(mydevice)
 net1D2.to(mydevice)
 
 
-file_list,sap_list=get_fileSAP('/media/sarod')
+file_list,sap_list=get_fileSAP('/home/sarod/scratch1/H5')
 
 which_sap=0 # valid in file_list/sap_list -7
 
@@ -119,7 +119,7 @@ def build_edge_graph(baselines):
 #########################################################################
 edge_index_np=build_edge_graph(baselines)
 # edge index: baseline id
-edge_index=torch.tensor(edge_index_np.transpose(),dtype=torch.long).contiguous()
+edge_index=torch.tensor(edge_index_np.transpose(),dtype=torch.long).contiguous().to(mydevice)
 
 # get one baseline to get patch sizes
 patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=0,patch_size=128,num_channels=num_in_channels)
@@ -129,27 +129,28 @@ Nfeat=L+Lt+Lt
 # edge attribute: None
 edge_attr=None
 # node attribute: latent features of each baseline
-node_data=torch.zeros((NBASE,Nfeat))
+node_data=torch.zeros((NBASE,Nfeat)).to(mydevice)
 # node label: distance from Kharmonic means : Kc values
-node_label=torch.zeros((NBASE,Kc))
+node_label=torch.zeros((NBASE,Kc)).to(mydevice)
 
 # iterate over each baselines
 with torch.no_grad():
  for nb in range(NBASE):#range(nbase):
-   baseline,patchx,patchy,x=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels,give_baseline=True)
-   x=x.cpu()
+   baseline,patchx,patchy,x,uvcoords=get_data_for_baseline(file_list[which_sap],sap_list[which_sap],baseline_id=nb,patch_size=128,num_channels=num_in_channels,give_baseline=True,uvdist=True)
+   x=x.to(mydevice)
+   uv=Variable(uvcoords).to(mydevice)
    # get latent variable
-   x1,mu=net(x)
+   x1,mu=net(x,uv)
    x11=(x-x1)/2
    # vectorize
    iy1=torch.flatten(x11,start_dim=2,end_dim=3)
    iy2=torch.flatten(torch.transpose(x11,2,3),start_dim=2,end_dim=3)
-   yy1,yy1mu=net1D1(iy1)
-   yy2,yy2mu=net1D2(iy2)
+   yy1,yy1mu=net1D1(iy1,uv)
+   yy2,yy2mu=net1D2(iy2,uv)
    Mu=torch.cat((mu,yy1mu,yy2mu),1)
    # average over batch dimension : patchx x patchy
    (nbatch,_)=Mu.shape
-   dist=torch.zeros(Kc)
+   dist=torch.zeros(Kc).to(mydevice)
    for ck in range(Kc):
      for cn in range(nbatch):
        dist[ck]=dist[ck]+torch.sum(torch.linalg.norm(Mu[cn,:]-mod.M[ck,:],2))
@@ -162,7 +163,7 @@ with torch.no_grad():
 graphdata=Data(x=node_data,edge_index=edge_index,y=node_label)
 
 print(f'Graph has {graphdata.num_nodes} nodes and {graphdata.num_edges} edges')
-print(f'has self loops {graphdata.contains_self_loops()} is undirected {graphdata.is_undirected()}')
+print(f'has self loops {graphdata.has_self_loops()} is undirected {graphdata.is_undirected()}')
 
 def visualize(h,color=None,epoch=None,loss=None):
     plt.figure(figsize=(7,7))
@@ -195,7 +196,7 @@ class GraphNet(nn.Module):
         return x
 
 
-gnet=GraphNet(node_features=Nfeat,node_labels=Kc,hidden_channels=4)
+gnet=GraphNet(node_features=Nfeat,node_labels=Kc,hidden_channels=4).to(mydevice)
 gnet.train()
 optimizer=torch.optim.Adam(gnet.parameters(),lr=0.01)
 criterion=torch.nn.MSELoss()
